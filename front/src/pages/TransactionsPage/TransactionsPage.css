@@ -1,0 +1,150 @@
+/* front/src/pages/TransactionPage/TransactionsPage.css */
+
+/* ===== PAGE ===== */
+.tp-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tp-header {
+  margin-bottom: 16px;
+}
+
+/* ===== LIST ===== */
+.tp-list {
+  max-width: 700px;
+  width: 100%;
+
+  margin: 0 auto; /* центрирование */
+  gap: 5px;
+
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== ROW ===== */
+.tp-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto; /* left | right | actions */
+
+  align-items: center;
+
+  padding: 7px 15px;
+  border-radius: 10px;
+  background: #1a1a1a;
+
+  transition: background 0.2s ease;
+}
+
+/* hover строки */
+.tp-row:hover {
+  background: #222;
+}
+
+/* ===== LEFT ===== */
+.tp-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center; /* центр по вертикали */
+  min-width: 120px;
+}
+
+.tp-type {
+  font-weight: 600;
+}
+
+/* BUY / SELL цвета */
+.tp-type--BUY {
+  color: #4caf50;
+}
+
+.tp-type--SELL {
+  color: #f44336;
+}
+
+.tp-date {
+  font-size: 12px;
+  opacity: 0.6;
+  margin-top: 4px;
+}
+
+/* ===== RIGHT ===== */
+.tp-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  width: 100%;
+}
+
+/* строка внутри right */
+.tp-line {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+/* сумма сделки (цвет зависит от типа) */
+.tp-amount {
+  font-weight: 600;
+}
+
+/* BUY зелёный / SELL красный */
+.tp-amount--BUY {
+  color: #4caf50;
+}
+
+.tp-amount--SELL {
+  color: #f44336;
+}
+
+/* meta текст */
+.tp-meta {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.tp-strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ===== ACTIONS ===== */
+.tp-actions {
+  display: flex;
+  gap: 8px;
+
+  align-items: center; /* фиксируем по центру */
+}
+
+/* кнопки */
+.tp-btn {
+  background: transparent;
+  border: 1px solid #333;
+  color: #ddd;
+
+  padding: 6px 10px;
+  border-radius: 6px;
+
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+/* hover */
+.tp-btn:hover {
+  border-color: #d4af37;
+  color: #d4af37;
+  background: rgba(212, 175, 55, 0.08);
+}
+
+/* delete */
+.tp-btn--danger:hover {
+  border-color: #f44336;
+  color: #f44336;
+  background: rgba(244, 67, 54, 0.08);
+}
+
+/* ===== STATE ===== */
+.tp-state {
+  padding: 20px;
+}

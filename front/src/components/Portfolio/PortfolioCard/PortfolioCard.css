@@ -1,0 +1,139 @@
+/* ===== ROW ===== */
+.portfolio-card {
+  display: grid;
+  grid-template-columns: 180px 1fr 160px; /* left | center | right */
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid #222;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.portfolio-card:hover {
+  background: #1a1a1a;
+}
+
+/* ===== LEFT ===== */
+.pc-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pc-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #222;
+  border-radius: 50%;
+}
+
+.pc-symbol {
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* ===== CENTER ===== */
+.pc-center {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+}
+
+.pc-price {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Изменение 24h */
+.pc-change {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.pc-change.up { color: #4caf50; }
+.pc-change.down { color: #f44336; }
+.pc-change.neutral { color: #7c7c7c; }
+
+/* ===== RIGHT BLOCK — выравнивание по правому краю ===== */
+.trash-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  
+  /* ✅ Ключевое: сдвигаем весь блок вправо внутри своей grid-ячейки */
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.pc-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end; /* ✅ текст и значения прижаты вправо */
+  text-align: right;
+  gap: 6px;
+}
+
+.pc-invested {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.pc-amount {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+/* Кнопка удаления */
+.btn-delete-icon {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 6px;
+  transition: transform 0.15s ease, color 0.15s ease, background 0.15s ease;
+  color: #6666666c;
+  flex-shrink: 0; /* ✅ кнопка не сжимается */
+}
+
+.btn-delete-icon:hover {
+  color: #f44336;
+  /* background: #2a2a2a00; */
+}
+
+.btn-delete-icon:active {
+  transform: scale(0.95);
+}
+
+/* Адаптив для мобильных */
+@media (max-width: 600px) {
+  .portfolio-card {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: 
+      "left right"
+      "center center";
+    gap: 8px 12px;
+    padding: 10px 12px;
+  }
+  
+  .pc-left { grid-area: left; }
+  .pc-center { grid-area: center; align-items: flex-start; }
+  .trash-block { 
+    grid-area: right; 
+    margin-left: 0; 
+    justify-content: flex-start;
+  }
+  
+  .pc-right {
+    align-items: flex-end;
+    text-align: right;
+  }
+}

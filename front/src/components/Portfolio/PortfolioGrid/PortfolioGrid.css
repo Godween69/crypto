@@ -1,0 +1,18 @@
+/* front/src/components/Portfolio/PortfolioGrid/PortfolioGrid.css */
+
+.portfolio-grid {
+  display: flex;
+  flex-direction: column;
+
+  max-width: 900px;   /* ограничение как у дашборда */
+  width: 100%;
+
+  margin: 0 auto;
+
+  gap: 0; /* важно — строки сами разделяются border'ами */
+}
+
+.btn-delete-icon:hover {
+  color: #ff3b3b;
+  transform: scale(1.15);
+}
