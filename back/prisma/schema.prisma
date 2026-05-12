@@ -1,6 +1,11 @@
-// npx prisma migrate dev
-// npx prisma generate
-// npx prisma studio
+// npx prisma migrate dev --name описание
+// npx prisma migrate reset - удаляет ВСЕ таблицы
+// npx prisma generate - пересобирает Prisma Client
+
+// npx prisma studio -  запускает веб-интерфейс
+// Поднимается локальный сервер (по умолчанию http://localhost:5555)
+// Автоматически открывается браузер с интерфейсом Studio
+// Prisma читает ваш schema.prisma и подключается к БД через DATABASE_URL из .env
 
 generator client {
   provider = "prisma-client-js"
@@ -18,4 +23,18 @@ model Transaction {
   amount    Float // количество
   price     Float // цена
   createdAt DateTime @default(now()) // момент события
+}
+
+model Coin {
+  id Int @id @default(autoincrement())
+
+  symbol  String @unique // то, что приходит от меня BTC, ETH, ADA
+  geckoId String @unique // то, что нужно CoinGecko bitcoin, ethereum (CoinGecko id)
+
+  name String? // имя (optional)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt // контроль обновлений
+
+  @@index([symbol])
 }
