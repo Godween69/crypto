@@ -1,3 +1,5 @@
+// front/src/pages/PortfolioPage/PortfolioPage.tsx
+
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -15,63 +17,98 @@ export const PortfolioPage = () => {
   const navigate = useNavigate();
   const { open, close } = useModal();
 
-  // 1. ЗАПРОСЫ ДАННЫХ (все хуки строго в начале)
+  // =========================
+  // 1. PORTFOLIO QUERY
+  // =========================
   const portfolioQuery = usePortfolio();
 
-  // Стабильный массив символов для market-запроса
+  // symbols для market API (ВАЖНО: без mutation sort)
   const symbols = useMemo(
     () => portfolioQuery.data?.map((i) => i.symbol) ?? [],
     [portfolioQuery.data]
   );
 
+  // =========================
+  // 2. MARKET QUERY
+  // =========================
   const marketQuery = useMarketData(symbols);
 
-  // 2. СТАБИЛЬНЫЕ ССЫЛКИ НА МАССИВЫ
-  const portfolio = useMemo(() => portfolioQuery.data ?? [], [portfolioQuery.data]);
-  const market = useMemo(() => marketQuery.data ?? [], [marketQuery.data]);
+  // =========================
+  // 3. SAFE ARRAYS
+  // =========================
+  const portfolio = useMemo(
+    () => portfolioQuery.data ?? [],
+    [portfolioQuery.data]
+  );
 
+  const market = useMemo(
+    () => marketQuery.data ?? [],
+    [marketQuery.data]
+  );
+
+  // =========================
+  // 4. LOADING / ERROR STATE
+  // =========================
   const isLoading =
     portfolioQuery.isLoading ||
     (symbols.length > 0 && marketQuery.isLoading);
+
   const hasError = portfolioQuery.error || marketQuery.error;
+
   const refetchAll = () => {
     portfolioQuery.refetch();
     marketQuery.refetch();
   };
 
-  // 3. MAP ДЛЯ БЫСТРОГО ДОСТУПА К РЫНОЧНЫМ ДАННЫМ
-  const marketMap = useMemo(
-    () => new Map(market.map((item) => [item.symbol, item])),
-    [market]
-  );
+  // =========================
+  // 5. MARKET MAP (FIX CASE BUG)
+  // =========================
+  const marketMap = useMemo(() => {
+    return new Map(
+      market.map((item) => [
+        item.symbol.toUpperCase(), // 🔥 FIX: normalize
+        item,
+      ])
+    );
+  }, [market]);
 
-  // 4. ФОРМИРОВАНИЕ VIEW-МОДЕЛИ
+  // =========================
+  // 6. VIEW MODEL (MAIN FIX AREA)
+  // =========================
   const view = useMemo(() => {
     return portfolio.map((item) => {
-      const m = marketMap.get(item.symbol);
+      const m = marketMap.get(item.symbol.toUpperCase()); // 🔥 FIX
+
       const price = m?.currentPrice ?? 0;
       const totalValue = item.amount * price;
       const pnl = totalValue - item.invested;
-      const pnlPercent = item.invested ? (pnl / item.invested) * 100 : 0;
-      const change24h = m?.change24h ?? 0;
+      const pnlPercent = item.invested
+        ? (pnl / item.invested) * 100
+        : 0;
 
-      // Формула: текущая стоимость * (процент изменения / 100)
-      const change24hValue = totalValue * (change24h / 100);
+      const change24h = m?.change24h ?? 0;
 
       return {
         ...item,
+
+        // 🔥 ВАЖНО: прокидываем ВСЕ market данные
+        ...m,
+
         currentPrice: price,
         totalValue,
         pnl,
         pnlPercent,
         change24h,
-        change24hValue,
       };
     });
   }, [portfolio, marketMap]);
 
-  // 5. СОСТОЯНИЯ UI (строго после всех хуков и вычислений)
-  if (isLoading) return <div className="pp-state">Загрузка данных...</div>;
+  // =========================
+  // 7. UI STATES
+  // =========================
+  if (isLoading) {
+    return <div className="pp-state">Загрузка данных...</div>;
+  }
 
   if (hasError) {
     return (
@@ -85,31 +122,47 @@ export const PortfolioPage = () => {
   if (!portfolio.length) {
     return (
       <div className="pp-page">
-        <header className="pp-header"><h1>Portfolio Dashboard</h1></header>
+        <header className="pp-header">
+          <h1>Portfolio Dashboard</h1>
+        </header>
+
         <div className="pp-empty">
           <p>Портфель пуст</p>
-          <button className="btn-add" onClick={() => open(<TransactionForm onClose={close} />)}>
-            + 
+
+          <button
+            className="btn-add"
+            onClick={() =>
+              open(<TransactionForm onClose={close} />)
+            }
+          >
+            +
           </button>
         </div>
       </div>
     );
   }
 
-  // 6. ОБРАБОТЧИКИ
-  const handleOpen = (symbol: string) => navigate(`/portfolio/${symbol}`);
-  const handleCreateTransaction = () => open(<TransactionForm onClose={close} />);
+  // =========================
+  // 8. HANDLERS
+  // =========================
+  const handleOpen = (symbol: string) =>
+    navigate(`/portfolio/${symbol}`);
 
-  // 7. РЕНДЕР
+  const handleCreateTransaction = () =>
+    open(<TransactionForm onClose={close} />);
+
+  // =========================
+  // 9. RENDER
+  // =========================
   return (
     <div className="pp-page">
       <header className="pp-header">
         <h1>Portfolio Dashboard</h1>
+
         <button
           className="btn-refresh"
           onClick={refetchAll}
           disabled={isLoading}
-          aria-label="Обновить данные"
         >
           ↻
         </button>
@@ -119,12 +172,18 @@ export const PortfolioPage = () => {
         <PortfolioSummary items={view} />
       </div>
 
-      <button className="btn-add" onClick={handleCreateTransaction} aria-label="Добавить транзакцию">
+      <button
+        className="btn-add"
+        onClick={handleCreateTransaction}
+      >
         +
       </button>
 
       <div className="pp-section">
-        <PortfolioGrid items={view} onOpen={handleOpen} />
+        <PortfolioGrid
+          items={view}
+          onOpen={handleOpen}
+        />
       </div>
     </div>
   );

@@ -12,5 +12,5 @@ export const getMarketData = async (
     },
   });
 
-  return response.data;
+  return Array.isArray(response.data) ? response.data : [];
 };

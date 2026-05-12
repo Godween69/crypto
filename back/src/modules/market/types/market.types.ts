@@ -1,15 +1,12 @@
-export type MarketData = {
-  symbol: string;
-  currentPrice: number;
-  change24h: number;
-};
+// back/src/modules/market/types/market.types.ts
 
-// Результат валидации символа
-export type VerifySymbolResult = {
-  valid: boolean;
-  symbol: string;
-  name?: string;
-  current_price?: number;
-  change_24h?: number;
-  message?: string;
+export type MarketData = {
+  coinId: string; // CoinGecko id
+  symbol: string; // тикер
+
+  currentPrice: number; // текущая цена
+  change24h: number; // изменение за 24ч
+
+  image: string; // иконка монеты
+  rank: number; // market cap rank
 };

@@ -8,9 +8,15 @@ export type PortfolioItem = {
 };
 
 export type MarketData = {
+  coinId: string;
   symbol: string;
+
   currentPrice: number;
   change24h: number;
+
+  image: string;
+  rank: number;
+  name: string;
 };
 
 // UI-модель (расширенный элемент)
