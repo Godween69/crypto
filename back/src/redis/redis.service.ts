@@ -1,29 +1,39 @@
-// back/src/redis/redis.service.ts
-
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class RedisService implements OnModuleDestroy {
-  private client = new Redis({
-    host: '127.0.0.1',
-    port: 6379,
-  });
+  private readonly logger = new Logger(RedisService.name);
+  private client: Redis;
+
+  constructor(private config: ConfigService) {
+    this.client = new Redis({
+      host: this.config.get<string>('REDIS_HOST', '127.0.0.1'),
+      port: this.config.get<number>('REDIS_PORT', 6379),
+      // ioredis автоматически переподключается при обрывах
+    });
+
+    this.client.on('connect', () => this.logger.log('Redis connected'));
+    this.client.on('error', (err) =>
+      this.logger.error(`Redis error: ${err.message}`),
+    );
+  }
 
   async set(key: string, value: any, ttlSeconds?: number) {
     const data = JSON.stringify(value);
-
-    if (ttlSeconds) {
-      return this.client.set(key, data, 'EX', ttlSeconds);
-    }
-
-    return this.client.set(key, data);
+    return ttlSeconds
+      ? this.client.set(key, data, 'EX', ttlSeconds)
+      : this.client.set(key, data);
   }
 
   async get<T>(key: string): Promise<T | null> {
-    const value = await this.client.get(key);
-    if (!value) return null;
-    return JSON.parse(value);
+    try {
+      const value = await this.client.get(key);
+      return value ? JSON.parse(value) : null;
+    } catch {
+      return null; // защита от битого JSON
+    }
   }
 
   async del(key: string) {

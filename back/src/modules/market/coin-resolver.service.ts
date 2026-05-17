@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
 import { CoinRepository } from './coin.repository';
+import { RedisService } from '../../redis/redis.service';
 
 // Ответ CoinGecko
 type CoinGeckoSearch = {
@@ -32,6 +33,7 @@ export class CoinResolverService implements OnModuleInit {
   constructor(
     private repo: CoinRepository,
     private config: ConfigService, //Чтение .env
+    private redis: RedisService, // добавляем Redis слой между map и БД
   ) {}
 
   // ────── Прогрев кэша при старте ────────────────────────────────────
@@ -46,53 +48,76 @@ export class CoinResolverService implements OnModuleInit {
     await this.init();
   }
 
-  // ────── Резолвер symbol -> gecko id ────────────────────────────────────
+// ────── Резолвер symbol -> gecko id ────────────────────────────────────
 
-  async resolve(symbol: string): Promise<string> {
-    const key = symbol.toUpperCase();
+async resolve(symbol: string): Promise<string> {
+  const key = symbol.toUpperCase();
 
-    // Память (0мс) Если нет -> идем в БД
-    const cached = this.map.get(key);
-    if (cached) return cached;
+  // 1. Память (0мс)
+  // самый быстрый слой (in-process cache)
+  const cached = this.map.get(key);
+  if (cached) return cached;
 
-    // База данных (1-5мс) Если нет -> идем на внешний API
-    const dbCoin = await this.repo.findBySymbol(key);
+  // 2. Redis cache (1–2мс, shared между инстансами)
+  const redisKey = `coin:${key}`;
 
-    if (dbCoin) {
-      this.map.set(key, dbCoin.geckoId); // если есть -> кладем в память
-
-      return dbCoin.geckoId;
+  try {
+    const redisCached = await this.redis.get<string>(redisKey);
+    if (redisCached) {
+      this.map.set(key, redisCached); // прогреваем memory cache
+      return redisCached;
     }
-    // Внешний API (800мс)
-    const geckoId = await this.searchCoin(symbol);
+  } catch {
+    // Redis не должен ломать основной flow
+    // fallback просто продолжается дальше
+  }
 
-    // Если нет - бросаем ошибку
-    if (!geckoId) throw new Error(`Монета не найдена: ${symbol}`);
+  // 3. База данных (1–5мс)
+  const dbCoin = await this.repo.findBySymbol(key);
 
-    // Если нашли - сохраняем результат
-    // Race Condition защита
-    try {
-      await this.repo.upsert(key, geckoId); // <- кладем в БД
-    } catch (error) {
-      // Если ошибка относится к Prisma
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        // Если P2002 = другой поток уже вставил эту монету
-        if (error.code === 'P2002') {
-          // Просто читаем то, что уже создал соседний поток
-          const existing = await this.repo.findBySymbol(key);
-          if (existing) {
-            this.map.set(key, existing.geckoId);
-            return existing.geckoId;
-          }
+  if (dbCoin) {
+    this.map.set(key, dbCoin.geckoId);
+
+    // сохраняем в Redis (TTL: 24h)
+    await this.redis.set(redisKey, dbCoin.geckoId, 60 * 60 * 24);
+
+    return dbCoin.geckoId;
+  }
+
+  //  4. Внешний API (800мс) 
+  const geckoId = await this.searchCoin(symbol);
+
+  // Если нет - бросаем ошибку
+  if (!geckoId) throw new Error(`Монета не найдена: ${symbol}`);
+
+  //  Race Condition защита (DB write) 
+  try {
+    await this.repo.upsert(key, geckoId);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        const existing = await this.repo.findBySymbol(key);
+
+        if (existing) {
+          this.map.set(key, existing.geckoId);
+
+          // sync Redis тоже
+          await this.redis.set(redisKey, existing.geckoId, 60 * 60 * 24);
+
+          return existing.geckoId;
         }
       }
-      // Любая другая ошибка (сеть, БД, таймаут) -> пробрасываем как есть
-      throw error;
     }
-    this.map.set(key, geckoId); // <- кладем в память
 
-    return geckoId;
+    throw error;
   }
+
+  //Финальное сохранение (memory + Redis) 
+  this.map.set(key, geckoId);
+  await this.redis.set(redisKey, geckoId, 60 * 60 * 24);
+
+  return geckoId;
+}
 
   // ────── Пакетный резолвер ────────────────────────────────────
 
@@ -126,20 +151,43 @@ export class CoinResolverService implements OnModuleInit {
         params: { query: symbol },
         timeout: 5000, // Не ждём дольше 5 секунд
       });
-      // Сначала ищем точное совпадение
+
+      const upperSymbol = symbol.toUpperCase();
+
+      // 1. Сначала ищем точное совпадение (самый надежный вариант)
       const exact = data.coins.find(
-        (c) => c.symbol.toUpperCase() === symbol.toUpperCase(),
+        (c) => c.symbol.toUpperCase() === upperSymbol,
       );
 
-      // fallback берем монету с наименьшим(топовым) market_cap_rank (1-Bitcoin, 2-Ethereum)
-      // Это защищает от фейковых токенов с тем же тикером.
-      const best =
-        exact ??
-        data.coins.toSorted(
+      if (exact) {
+        // найдено строгое совпадение — сразу возвращаем
+        return exact.id;
+      }
+
+      // 2. Фильтруем кандидатов (защита от мусора)
+      // оставляем только те, у которых symbol реально совпадает
+      const candidates = data.coins.filter(
+        (c) => c.symbol.toUpperCase() === upperSymbol,
+      );
+
+      // 3. Безопасный fallback по market cap rank
+      // Это защищает от:
+      // - скам-токенов
+      // - фантомных совпадений
+      const RANK_LIMIT = 2000;
+
+      const pool = candidates.length > 0 ? candidates : data.coins;
+      const best = pool
+        .filter((c) => {
+          const rank = c.market_cap_rank ?? 999999;
+          return rank <= RANK_LIMIT;
+        })
+        .sort(
           (a, b) =>
             (a.market_cap_rank ?? 999999) - (b.market_cap_rank ?? 999999),
         )[0];
 
+      // 4. Если ничего адекватного не нашли — проваливаемся в null
       if (!best) return null;
 
       return best.id;
