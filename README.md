@@ -168,78 +168,78 @@ crypto
 │  │  └─ jest-e2e.json
 │  ├─ tsconfig.build.json
 │  └─ tsconfig.json
-├─ front
-│  ├─ .env
-│  ├─ eslint.config.js
-│  ├─ index.html
-│  ├─ package-lock.json
-│  ├─ package.json
-│  ├─ public
-│  │  ├─ favicon.svg
-│  │  └─ icons.svg
-│  ├─ README.md
-│  ├─ src
-│  │  ├─ api
-│  │  │  ├─ client.ts
-│  │  │  ├─ market.api.ts
-│  │  │  ├─ portfolio.api.ts
-│  │  │  └─ transaction.api.ts
-│  │  ├─ app
-│  │  │  └─ router.tsx
-│  │  ├─ App.css
-│  │  ├─ App.tsx
-│  │  ├─ components
-│  │  │  ├─ Layout
-│  │  │  ├─ Modal
-│  │  │  │  ├─ Modal.css
-│  │  │  │  ├─ ModalContext.ts
-│  │  │  │  └─ ModalProvider.tsx
-│  │  │  ├─ Navbar
-│  │  │  ├─ Portfolio
-│  │  │  │  ├─ AssetSummary
-│  │  │  │  │  ├─ AssetSummary.css
-│  │  │  │  │  └─ AssetSummary.tsx
-│  │  │  │  ├─ PortfolioCard
-│  │  │  │  │  ├─ PortfolioCard.css
-│  │  │  │  │  └─ PortfolioCard.tsx
-│  │  │  │  ├─ PortfolioGrid
-│  │  │  │  │  ├─ PortfolioGrid.css
-│  │  │  │  │  └─ PortfolioGrid.tsx
-│  │  │  │  └─ PortfolioSummary
-│  │  │  │     ├─ PortfolioSummary.css
-│  │  │  │     └─ PortfolioSummary.tsx
-│  │  │  └─ TransactionForm
-│  │  │     ├─ TransactionForm.css
-│  │  │     └─ TransactionForm.tsx
-│  │  ├─ hooks
-│  │  │  ├─ useCreateTransaction.ts
-│  │  │  ├─ useDeletePortfolioItem.ts
-│  │  │  ├─ useDeleteTransaction.ts
-│  │  │  ├─ useMarketData.ts
-│  │  │  ├─ useModal.ts
-│  │  │  ├─ usePortfolio.ts
-│  │  │  ├─ useTransactions.ts
-│  │  │  └─ useUpdateTransaction.ts
-│  │  ├─ index.css
-│  │  ├─ main.tsx
-│  │  ├─ pages
-│  │  │  ├─ PortfolioPage
-│  │  │  │  ├─ PortfolioPage.css
-│  │  │  │  └─ PortfolioPage.tsx
-│  │  │  └─ TransactionsPage
-│  │  │     ├─ TransactionsPage.css
-│  │  │     └─ TransactionsPage.tsx
-│  │  ├─ providers
-│  │  │  └─ QueryProvider.tsx
-│  │  ├─ types
-│  │  │  ├─ portfolio.types.ts
-│  │  │  └─ transaction.types.ts
-│  │  └─ utils
-│  │     └─ calculateAssetPosition.ts
-│  ├─ tsconfig.app.json
-│  ├─ tsconfig.json
-│  ├─ tsconfig.node.json
-│  └─ vite.config.ts
-└─ README.md
+├─ docker-compose.yml
+└─ front
+   ├─ .env
+   ├─ eslint.config.js
+   ├─ index.html
+   ├─ package-lock.json
+   ├─ package.json
+   ├─ public
+   │  ├─ favicon.svg
+   │  └─ icons.svg
+   ├─ README.md
+   ├─ src
+   │  ├─ api
+   │  │  ├─ client.ts
+   │  │  ├─ market.api.ts
+   │  │  ├─ portfolio.api.ts
+   │  │  └─ transaction.api.ts
+   │  ├─ app
+   │  │  └─ router.tsx
+   │  ├─ App.css
+   │  ├─ App.tsx
+   │  ├─ components
+   │  │  ├─ Layout
+   │  │  ├─ Modal
+   │  │  │  ├─ Modal.css
+   │  │  │  ├─ ModalContext.ts
+   │  │  │  └─ ModalProvider.tsx
+   │  │  ├─ Navbar
+   │  │  ├─ Portfolio
+   │  │  │  ├─ AssetSummary
+   │  │  │  │  ├─ AssetSummary.css
+   │  │  │  │  └─ AssetSummary.tsx
+   │  │  │  ├─ PortfolioCard
+   │  │  │  │  ├─ PortfolioCard.css
+   │  │  │  │  └─ PortfolioCard.tsx
+   │  │  │  ├─ PortfolioGrid
+   │  │  │  │  ├─ PortfolioGrid.css
+   │  │  │  │  └─ PortfolioGrid.tsx
+   │  │  │  └─ PortfolioSummary
+   │  │  │     ├─ PortfolioSummary.css
+   │  │  │     └─ PortfolioSummary.tsx
+   │  │  └─ TransactionForm
+   │  │     ├─ TransactionForm.css
+   │  │     └─ TransactionForm.tsx
+   │  ├─ hooks
+   │  │  ├─ useCreateTransaction.ts
+   │  │  ├─ useDeletePortfolioItem.ts
+   │  │  ├─ useDeleteTransaction.ts
+   │  │  ├─ useMarketData.ts
+   │  │  ├─ useModal.ts
+   │  │  ├─ usePortfolio.ts
+   │  │  ├─ useTransactions.ts
+   │  │  └─ useUpdateTransaction.ts
+   │  ├─ index.css
+   │  ├─ main.tsx
+   │  ├─ pages
+   │  │  ├─ PortfolioPage
+   │  │  │  ├─ PortfolioPage.css
+   │  │  │  └─ PortfolioPage.tsx
+   │  │  └─ TransactionsPage
+   │  │     ├─ TransactionsPage.css
+   │  │     └─ TransactionsPage.tsx
+   │  ├─ providers
+   │  │  └─ QueryProvider.tsx
+   │  ├─ types
+   │  │  ├─ portfolio.types.ts
+   │  │  └─ transaction.types.ts
+   │  └─ utils
+   │     └─ calculateAssetPosition.ts
+   ├─ tsconfig.app.json
+   ├─ tsconfig.json
+   ├─ tsconfig.node.json
+   └─ vite.config.ts
 
 ```

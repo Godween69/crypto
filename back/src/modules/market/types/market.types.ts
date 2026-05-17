@@ -10,3 +10,15 @@ export type MarketData = {
   image: string; // иконка монеты
   rank: number; // market cap rank
 };
+
+// CoinGecko API response type
+export type CoinGeckoMarket = {
+  id: string;
+  symbol: string;
+
+  current_price: number;
+  price_change_percentage_24h: number;
+
+  image: string;
+  market_cap_rank: number;
+}[];

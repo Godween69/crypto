@@ -1,74 +1,53 @@
 // back/src/modules/market/market.service.ts
 
 import { Injectable, HttpException, OnModuleInit } from '@nestjs/common';
-
 import { ConfigService } from '@nestjs/config';
-
 import axios from 'axios';
 
 import { CoinResolverService } from './coin-resolver.service';
+import { RedisService } from '../../redis/redis.service';
 
-import { MarketData } from './types/market.types';
-
-type CoinGeckoMarket = {
-  id: string;
-  symbol: string;
-
-  current_price: number;
-  price_change_percentage_24h: number;
-
-  image: string;
-  market_cap_rank: number;
-}[];
+import { MarketData, CoinGeckoMarket } from './types/market.types';
 
 @Injectable()
 export class MarketService implements OnModuleInit {
-  // memory cache market data
-  private cache = new Map<
-    string,
-    {
-      data: MarketData[];
-      expires: number;
-    }
-  >();
-
-  // ttl cache 30 сек
-  private readonly CACHE_TTL = 30_000;
+  // TTL для Redis cache (120 секунд)
+  private readonly CACHE_TTL = 120;
 
   constructor(
     private config: ConfigService,
     private resolver: CoinResolverService,
+    private readonly redis: RedisService,
   ) {}
 
-  // прогрев resolver cache
+  // прогрев resolver (символы -> id)
   async onModuleInit() {
     await this.resolver.init();
   }
 
-  // основной market endpoint
+  // основной endpoint market данных
   async getMarketData(symbols: string[]): Promise<MarketData[]> {
-    const apiKey = this.config.get<string>('COINGECKO_API_KEY');
+    const apiKey = this.config.get<string>('COINGECKO_API_KEY'); // API key
+    const baseUrl = this.config.get<string>('COINGECKO_API_URL'); // base URL
 
-    const baseUrl = this.config.get<string>('COINGECKO_API_URL');
-
-    // resolve symbols -> gecko ids
+    // символы → CoinGecko ids
     const resolved = await this.resolver.resolveMany(symbols);
 
-    // stable ids key
+    // стабильный ключ кеша (чтобы порядок не влиял)
     const ids = resolved
       .map((c) => c.id)
       .sort()
       .join(',');
 
-    // memory cache hit
-    const cached = this.cache.get(ids);
-
-    if (cached && cached.expires > Date.now()) {
-      return cached.data;
-    }
+    // Redis cache key
+    const cacheKey = `market:${ids}`;
 
     try {
-      // CoinGecko markets endpoint
+      // 1. проверяем Redis cache
+      const cached = await this.redis.get<MarketData[]>(cacheKey);
+      if (cached) return cached; // cache hit
+
+      // 2. запрос к CoinGecko
       const { data } = await axios.get<CoinGeckoMarket>(
         `${baseUrl}/coins/markets`,
         {
@@ -77,36 +56,28 @@ export class MarketService implements OnModuleInit {
             vs_currency: 'usd',
             price_change_percentage: '24h',
           },
-
           headers: {
             'x-cg-demo-api-key': apiKey,
           },
         },
       );
 
-      // dto mapping
+      // 3. маппинг ответа в DTO
       const result: MarketData[] = data.map((coin) => ({
         coinId: coin.id,
-
         symbol: coin.symbol.toUpperCase(),
-
         currentPrice: coin.current_price ?? 0,
-
         change24h: coin.price_change_percentage_24h ?? 0,
-
         image: coin.image,
-
         rank: coin.market_cap_rank ?? 0,
       }));
 
-      // save cache
-      this.cache.set(ids, {
-        data: result,
-        expires: Date.now() + this.CACHE_TTL,
-      });
+      // 4. сохраняем в Redis (TTL 120s)
+      await this.redis.set(cacheKey, result, this.CACHE_TTL);
 
       return result;
     } catch (e) {
+      // единая ошибка API
       throw new HttpException('Market fetch failed', 500);
     }
   }
