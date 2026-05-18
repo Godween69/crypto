@@ -1,3 +1,5 @@
+// front\src\pages\TransactionsPage\TransactionsPage.tsx
+
 import { useParams } from "react-router-dom";
 
 import { AssetSummary } from "../../components/Portfolio/AssetSummary/AssetSummary";
@@ -63,6 +65,8 @@ export const TransactionPage = () => {
   // =========================
   // 5. РАСЧЁТ ПОЗИЦИИ
   // =========================
+  // Если монета не найдена в market API → цена = 0.
+  // P&L корректно покажет только реализованную прибыль.
   const currentPrice = market[0]?.currentPrice ?? 0;
   const position = calculateAssetPosition(symbol!, transactions, currentPrice);
 
@@ -72,10 +76,11 @@ export const TransactionPage = () => {
   return (
     <div className="tp-page">
       <header className="tp-header">
-        <h1>{symbol} покупки / продажи</h1>
+        <h1>{symbol} — история операций</h1>
       </header>
 
       <div className="tp-section">
+        {/* AssetSummary теперь отображает totalPnl и realizedPnl */}
         <AssetSummary data={position} />
       </div>
 
@@ -104,7 +109,9 @@ export const TransactionPage = () => {
                 </div>
 
                 <div className="tp-actions">
-                  <button className="tp-btn">Edit</button>
+                  <button className="tp-btn" disabled title="В разработке">
+                    Edit
+                  </button>
                   <button
                     className="tp-btn tp-btn--danger"
                     onClick={() => handleDelete(tx.id)}

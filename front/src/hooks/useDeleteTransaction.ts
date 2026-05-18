@@ -8,7 +8,6 @@ export const useDeleteTransaction = () => {
 
   return useMutation({
     mutationFn: deleteTransaction,
-
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["portfolio"],

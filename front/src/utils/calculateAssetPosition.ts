@@ -1,61 +1,75 @@
-// front/src/utils/calculateAssetPosition.ts
-
 import type { Transaction } from "../types/transaction.types";
 import type { AssetPosition } from "../types/portfolio.types";
 
+const round = (n: number) => Math.round(n * 100) / 100;
+
 /**
- * Рассчитывает позицию актива с использованием средней цены покупки.
- * Формула: avgBuyPrice = сумма покупок / количество купленного
- * PnL считается относительно этой средней цены.
+ * Рассчитывает позицию с учётом реализованной и нереализованной прибыли.
+ * Метод: Average Cost Basis + накопление Realized P&L
  */
 export const calculateAssetPosition = (
   symbol: string,
   transactions: Transaction[],
   currentPrice: number,
 ): AssetPosition => {
-  const filtered = transactions.filter((t) => t.symbol === symbol);
+  const filtered = transactions
+    .filter((t) => t.symbol === symbol)
+    .sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
 
-  // Один проход: считаем количество, сумму покупок и сумму продаж
-  const { amount, totalBought } = filtered.reduce(
-    (acc, t) => {
-      const isBuy = t.type === "BUY";
-      return {
-        amount: acc.amount + (isBuy ? t.amount : -t.amount),
-        totalBought: acc.totalBought + (isBuy ? t.amount * t.price : 0),
-        totalSold: acc.totalSold + (isBuy ? 0 : t.amount * t.price),
-      };
-    },
-    { amount: 0, totalBought: 0, totalSold: 0 },
-  );
+  let amount = 0;
+  let costBasis = 0; // Себестоимость текущего остатка
+  let realizedPnl = 0; // Зафиксированная прибыль от продаж
+  let totalInvested = 0; // Всего вложено исторически (все BUY)
 
-  // Средняя цена покупки: только по купленным монетам
-  const boughtAmount = filtered
-    .filter((t) => t.type === "BUY")
-    .reduce((s, t) => s + t.amount, 0);
+  for (const t of filtered) {
+    if (t.type === "BUY") {
+      amount += t.amount;
+      costBasis += t.amount * t.price;
+      totalInvested += t.amount * t.price;
+    } else {
+      if (amount <= 0) continue;
 
-  const avgBuyPrice = boughtAmount > 0 ? totalBought / boughtAmount : 0;
+      const sellAmount = Math.min(t.amount, amount);
+      const avgPrice = costBasis / amount;
 
-  // Безопасные значения
-  const safePrice = Math.max(0, currentPrice ?? 0);
+      // ✅ Фиксируем прибыль/убыток по этой продаже
+      realizedPnl += (t.price - avgPrice) * sellAmount;
+
+      amount -= sellAmount;
+      costBasis -= sellAmount * avgPrice;
+    }
+  }
+
   const safeAmount = Math.max(0, amount);
+  const safePrice = Math.max(0, currentPrice ?? 0);
 
-  // Финансовые метрики
+  const avgBuyPrice = safeAmount > 0 ? costBasis / safeAmount : 0;
   const totalValue = safeAmount * safePrice;
-  const invested = safeAmount * avgBuyPrice; // ✅ корректные "вложения" в остаток
-  const pnl = totalValue - invested;
-  const pnlPercent = invested !== 0 ? (pnl / invested) * 100 : 0;
 
-  // Округление до 2 знаков
-  const round = (n: number) => Math.round(n * 100) / 100;
+  const unrealizedPnl = totalValue - costBasis;
+  const totalPnl = unrealizedPnl + realizedPnl;
+
+  // Процент считаем от исторических вложений, чтобы не ломался при закрытии позиции
+  const totalPnlPercent =
+    totalInvested > 0 ? (totalPnl / totalInvested) * 100 : 0;
+  const unrealizedPnlPercent =
+    costBasis > 0 ? (unrealizedPnl / costBasis) * 100 : 0;
 
   return {
     symbol,
     amount: round(safeAmount),
     currentPrice: round(safePrice),
     totalValue: round(totalValue),
-    invested: round(invested),
-    pnl: round(pnl),
-    pnlPercent: round(pnlPercent),
+    invested: round(costBasis), // Себестоимость остатка
+    totalInvested: round(totalInvested), // Всего вложено за всё время
+    pnl: round(unrealizedPnl), // Нереализованный
+    pnlPercent: round(unrealizedPnlPercent),
+    realizedPnl: round(realizedPnl), // Реализованный
+    totalPnl: round(totalPnl), // Общий (то, что нужно в UI)
+    totalPnlPercent: round(totalPnlPercent),
     avgBuyPrice: round(avgBuyPrice),
   };
 };

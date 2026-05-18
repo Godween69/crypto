@@ -1,150 +1,71 @@
-// front/src/components/TransactionForm/TransactionForm.tsx
-
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-
-import { useCreateTransaction } from '../../hooks/useCreateTransaction';
-
+import { useTransactionForm, type TransactionFormValues } from './useTransactionForm';
+import { SymbolField } from './SymbolField';
+import { AmountField } from './AmountField';
+import { PriceField } from './PriceField';
 import './TransactionForm.css';
 
-const transactionSchema = z.object({
-  symbol: z
-    .string()
-    .min(1)
-    .regex(/^[A-Za-z0-9]+$/),
-
-  type: z.enum(['BUY', 'SELL']),
-
-  amount: z.coerce.number().positive(),
-
-  price: z.coerce.number().positive(),
-});
-
-type TransactionFormValues = z.infer<typeof transactionSchema>;
-
-interface TransactionFormProps {
-  symbol?: string; // 👈 контекст страницы
+interface Props {
+  symbol?: string;
   initialData?: Partial<TransactionFormValues>;
   onSuccess?: () => void;
   onClose?: () => void;
 }
 
-export const TransactionForm = ({
-  symbol,
-  initialData,
-  onSuccess,
-  onClose,
-}: TransactionFormProps) => {
-  const { mutate, isPending, error } =
-    useCreateTransaction();
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-  } = useForm<TransactionFormValues>({
-    resolver: zodResolver(transactionSchema),
-
-    defaultValues: {
-      symbol:
-        symbol ??
-        initialData?.symbol ??
-        '',
-
-      type: initialData?.type ?? 'BUY',
-
-      amount: initialData?.amount ?? undefined,
-
-      price: initialData?.price ?? undefined,
-    },
-  });
-
-  const onSubmit = (data: TransactionFormValues) => {
-    mutate(data, {
-      onSuccess: () => {
-        reset();
-        onSuccess?.();
-        onClose?.();
-      },
-    });
-  };
+export const TransactionForm = ({ symbol, initialData, onSuccess, onClose }: Props) => {
+  const { form, state, handlers } = useTransactionForm({ symbol, initialData, onSuccess, onClose });
+  const { register, formState: { errors } } = form;
 
   return (
-    <form
-      onSubmit={handleSubmit(onSubmit)}
-      className="transaction-form"
-    >
-      {/* SYMBOL */}
+    <form className="transaction-form" onSubmit={handlers.onSubmit}>
+      <SymbolField
+        type={state.type}
+        disabled={state.isPending || !!symbol}
+        sellableAssets={state.sellableAssets}
+        registerReturn={register('symbol')}
+        onBlurTrigger={handlers.triggerMarketFetch}
+        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handlers.focusNext('type'))}
+      />
+
       <div className="form-field">
-        <label>Символ</label>
-
-        <input
-          placeholder="BTC"
-          disabled={isPending || !!symbol}
-          {...register('symbol')}
-        />
-
-        {errors.symbol && (
-          <span className="field-error">
-            {errors.symbol.message}
-          </span>
-        )}
-      </div>
-
-      {/* TYPE */}
-      <div className="form-field">
-        <label>Тип</label>
-
+        <label htmlFor="tx-type">Тип</label>
+        {/* ✅ {...register('type')} больше не конфликтует с кастомным ref */}
         <select
-          disabled={isPending}
+          id="tx-type"
+          disabled={state.isPending}
           {...register('type')}
+          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handlers.focusNext('amount'))}
         >
           <option value="BUY">BUY</option>
           <option value="SELL">SELL</option>
         </select>
       </div>
 
-      {/* AMOUNT */}
-      <div className="form-field">
-        <label>Количество</label>
+      <AmountField
+        type={state.type}
+        disabled={state.isPending}
+        sellAll={state.sellAll}
+        maxSellAmount={state.maxSellAmount}
+        registerReturn={register('amount')}
+        onSellAllChange={handlers.handleSellAllChange}
+        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handlers.focusNext('price'))}
+        error={errors.amount}
+      />
 
-        <input
-          type="number"
-          step="any"
-          disabled={isPending}
-          {...register('amount')}
-        />
-      </div>
+      <PriceField
+        disabled={state.isPending}
+        useMarketPrice={state.useMarketPriceEnabled}
+        marketPrice={state.marketPrice}
+        registerReturn={register('price')}
+        onMarketPriceToggle={handlers.handleMarketPriceToggle}
+        // ✅ Enter на последнем поле вызывает сабмит формы
+        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handlers.onSubmit())}
+        error={errors.price}
+      />
 
-      {/* PRICE */}
-      <div className="form-field">
-        <label>Цена</label>
+      {state.error && <div className="mutation-error">{state.error.message}</div>}
 
-        <input
-          type="number"
-          step="any"
-          disabled={isPending}
-          {...register('price')}
-        />
-      </div>
-
-      {/* ERROR */}
-      {error && (
-        <div className="mutation-error">
-          {error.message}
-        </div>
-      )}
-
-      {/* SUBMIT */}
-      <button
-        type="submit"
-        disabled={isPending}
-      >
-        {isPending
-          ? 'Сохранение...'
-          : 'Сохранить'}
+      <button type="submit" disabled={state.isPending || !!errors.amount}>
+        {state.isPending ? 'Сохранение...' : 'Сохранить'}
       </button>
     </form>
   );

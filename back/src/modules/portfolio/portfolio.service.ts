@@ -1,3 +1,5 @@
+// back\src\modules\portfolio\portfolio.service.ts
+
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { calculatePortfolio } from './core/calculatePortfolio';
