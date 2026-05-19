@@ -1,4 +1,13 @@
-import { IsString, IsNumber, IsIn, Min } from 'class-validator';
+// back\src\modules\transaction\dto\create-transaction.dto.ts
+
+import {
+  IsString,
+  IsNumber,
+  IsIn,
+  Min,
+  IsOptional,
+  IsDateString,
+} from 'class-validator';
 
 export class CreateTransactionDto {
   @IsString()
@@ -14,4 +23,10 @@ export class CreateTransactionDto {
   @IsNumber()
   @Min(0)
   price!: number;
+
+  // Опциональная дата операции
+  // Если не передано — сервис использует createdAt = now()
+  @IsOptional()
+  @IsDateString()
+  date?: string; // Формат: "2026-05-18" (ISO 8601, без времени)
 }

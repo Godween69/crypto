@@ -41,8 +41,10 @@
 
 /* ===== PnL ===== */
 .as-pnl {
+  display: flex;
   font-size: 14px;
   font-weight: 500;
+  gap: 3px;
 }
 
 .as-pnl.up {
@@ -65,4 +67,16 @@
 /* optional visual separator feel */
 .asset-summary {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.as-breakdown {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+}
+.as-detail.up {
+  color: #2ecc71;
+}
+.as-detail.down {
+  color: #ff4d4d;
 }

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { useForm, useWatch } from "react-hook-form"; // ✅ useWatch вместо watch
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 
 import { useCreateTransaction } from "../../hooks/useCreateTransaction";
 import { usePortfolio } from "../../hooks/usePortfolio";
 import { useMarketData } from "../../hooks/useMarketData";
+
+const getTodayDate = () => new Date().toISOString().split("T")[0];
 
 const transactionSchema = z.object({
   symbol: z
@@ -25,6 +27,7 @@ const transactionSchema = z.object({
       .number({ invalid_type_error: "Введите число" })
       .positive("Должно быть больше 0"),
   ),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Формат: ГГГГ-ММ-ДД"),
 });
 
 export type TransactionFormValues = z.infer<typeof transactionSchema>;
@@ -48,6 +51,7 @@ export const useTransactionForm = ({
   const [sellAll, setSellAll] = useState(false);
   const [useMarketPriceEnabled, setUseMarketPriceEnabled] = useState(true);
   const [fetchSymbol, setFetchSymbol] = useState(symbol ?? "");
+  const [useTodayDate, setUseTodayDate] = useState(true);
 
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema),
@@ -56,12 +60,12 @@ export const useTransactionForm = ({
       type: initialData?.type ?? "BUY",
       amount: initialData?.amount,
       price: initialData?.price,
+      date: initialData?.date ?? getTodayDate(),
     },
   });
 
   const { setValue, setError, clearErrors, setFocus, handleSubmit } = form;
 
-  // ✅ useWatch безопасен для React Compiler (подписка через React-хук, а не императивную функцию)
   const type = useWatch({ control: form.control, name: "type" });
   const selectedSymbol = useWatch({ control: form.control, name: "symbol" });
   const amount = useWatch({ control: form.control, name: "amount" });
@@ -78,6 +82,20 @@ export const useTransactionForm = ({
   );
   const marketPrice = marketData[0]?.currentPrice ?? 0;
 
+  // ✅ Фоллбэк: если name не пришёл — генерируем из coinId
+  const marketName = useMemo(() => {
+    const item = marketData[0];
+    if (!item) return "";
+    if (item.name) return item.name;
+    if (item.coinId) {
+      return item.coinId
+        .split("-")
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+    }
+    return "";
+  }, [marketData]);
+
   useEffect(() => {
     if (type === "SELL" && sellAll) setValue("amount", maxSellAmount);
   }, [type, sellAll, maxSellAmount, setValue]);
@@ -86,6 +104,10 @@ export const useTransactionForm = ({
     if (useMarketPriceEnabled && marketPrice > 0)
       setValue("price", marketPrice);
   }, [marketPrice, useMarketPriceEnabled, setValue]);
+
+  useEffect(() => {
+    if (useTodayDate) setValue("date", getTodayDate());
+  }, [useTodayDate, setValue]);
 
   useEffect(() => {
     if (type === "SELL" && amount > maxSellAmount) {
@@ -103,13 +125,26 @@ export const useTransactionForm = ({
   const handleSellAllChange = (checked: boolean) => setSellAll(checked);
   const handleMarketPriceToggle = (checked: boolean) =>
     setUseMarketPriceEnabled(checked);
+  const handleUseTodayDateToggle = (checked: boolean) =>
+    setUseTodayDate(checked);
 
   const onSubmit = handleSubmit((data) => {
     if (data.type === "SELL" && data.amount > maxSellAmount) {
       setError("amount", { type: "manual", message: "Недостаточно актива" });
       return;
     }
-    mutate(data, {
+
+    const today = getTodayDate();
+    const payload = {
+      symbol: data.symbol,
+      type: data.type,
+      amount: Number(data.amount),
+      price: Number(data.price),
+      // Отправляем date только если это НЕ сегодня (совместимость со старым бэкендом)
+      ...(data.date !== today && { date: data.date }),
+    };
+
+    mutate(payload, {
       onSuccess: () => {
         form.reset();
         onSuccess?.();
@@ -127,17 +162,19 @@ export const useTransactionForm = ({
       sellAll,
       useMarketPriceEnabled,
       marketPrice,
+      marketName,
       maxSellAmount,
       sellableAssets,
       isPending,
       error,
+      useTodayDate,
     },
     handlers: {
       onSubmit,
       triggerMarketFetch,
       handleSellAllChange,
       handleMarketPriceToggle,
-      // ✅ Нативная фокусировка RHF. Не требует кастомных рефов.
+      handleUseTodayDateToggle,
       focusNext: (field: keyof TransactionFormValues) => setFocus(field),
     },
   };

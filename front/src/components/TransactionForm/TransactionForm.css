@@ -212,3 +212,15 @@
     font-size: 16px;
   }
 }
+
+.market-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: #7c7c7c;
+}
+
+.market-name {
+  color: #4caf50; /* ✅ Зелёный цвет для названия */
+  font-weight: 500;
+}

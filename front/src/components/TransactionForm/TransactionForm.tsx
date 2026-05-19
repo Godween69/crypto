@@ -28,7 +28,6 @@ export const TransactionForm = ({ symbol, initialData, onSuccess, onClose }: Pro
 
       <div className="form-field">
         <label htmlFor="tx-type">Тип</label>
-        {/* ✅ {...register('type')} больше не конфликтует с кастомным ref */}
         <select
           id="tx-type"
           disabled={state.isPending}
@@ -55,12 +54,32 @@ export const TransactionForm = ({ symbol, initialData, onSuccess, onClose }: Pro
         disabled={state.isPending}
         useMarketPrice={state.useMarketPriceEnabled}
         marketPrice={state.marketPrice}
+        marketName={state.marketName}
         registerReturn={register('price')}
         onMarketPriceToggle={handlers.handleMarketPriceToggle}
-        // ✅ Enter на последнем поле вызывает сабмит формы
-        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handlers.onSubmit())}
+        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handlers.focusNext('date'))}
         error={errors.price}
       />
+
+      <div className="form-field">
+        <label htmlFor="tx-date">Дата операции</label>
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={state.useTodayDate}
+            onChange={(e) => handlers.handleUseTodayDateToggle(e.target.checked)}
+          />
+          Использовать сегодняшнюю дату
+        </label>
+        <input
+          id="tx-date"
+          type="date"
+          disabled={state.isPending || state.useTodayDate}
+          {...register('date')}
+          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handlers.onSubmit())}
+        />
+        {errors.date && <span className="field-error">{errors.date.message}</span>}
+      </div>
 
       {state.error && <div className="mutation-error">{state.error.message}</div>}
 

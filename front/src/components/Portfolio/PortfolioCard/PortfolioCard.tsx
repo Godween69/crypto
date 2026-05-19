@@ -3,6 +3,8 @@
 import type { PortfolioItemView } from "../../../types/portfolio.types";
 import { Trash2 } from "lucide-react";
 import { useDeletePortfolioItem } from "../../../hooks/useDeletePortfolioItem";
+import { formatCoinName } from "../../../utils/formatCoinName";
+
 import "./PortfolioCard.css";
 
 interface Props {
@@ -33,6 +35,8 @@ export const PortfolioCard = ({ item, onOpen }: Props) => {
 
   // нормализация image (CoinGecko иногда отдаёт null/undefined)
   const imageSrc = item.image || "/fallback-coin.png";
+
+  const displayName = formatCoinName(item.name, item.coinId, item.symbol);
 
   // delete handler // stopPropagation чтобы не открыть карточку
   const handleDelete = (
@@ -78,7 +82,7 @@ export const PortfolioCard = ({ item, onOpen }: Props) => {
 
           <div className="pc-meta">
             <span className="pc-name">
-              {item.coinId ?? item.symbol}
+              {displayName}
             </span>
           </div>
 
