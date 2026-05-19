@@ -162,7 +162,7 @@ export const PortfolioPage = () => {
     return (
       <div className="pp-page">
         <header className="pp-header">
-          <h1>Portfolio Dashboard</h1>
+          {/* <h1>Портфолио</h1> */}
         </header>
 
         <div className="pp-empty">
@@ -190,40 +190,16 @@ export const PortfolioPage = () => {
   const handleOpen = (symbol: string) =>
     navigate(`/portfolio/${symbol}`);
 
-  // Открытие модального окна для создания новой транзакции
-  const handleCreateTransaction = () =>
-    open(<TransactionForm onClose={close} />);
-
   // =========================
   // 9. ОСНОВНОЙ РЕНДЕР
   // =========================
   return (
     <div className="pp-page">
-      <header className="pp-header">
-        <h1>Portfolio Dashboard</h1>
-
-        {/* Кнопка ручного обновления данных */}
-        <button
-          className="btn-refresh"
-          onClick={refetchAll}
-          disabled={isLoading}
-        >
-          ↻
-        </button>
-      </header>
 
       {/* Сводка портфеля: вложено, изменение за 24ч, общий PnL */}
-      <div className="pp-section">
+      <div className="pp-section-sum">
         <PortfolioSummary items={view} />
       </div>
-
-      {/* Кнопка добавления транзакции (плавающая) */}
-      <button
-        className="btn-add"
-        onClick={handleCreateTransaction}
-      >
-        +
-      </button>
 
       {/* Сетка карточек активов */}
       <div className="pp-section">

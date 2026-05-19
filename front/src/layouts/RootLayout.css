@@ -1,0 +1,14 @@
+/* front/src/layouts/RootLayout.css */
+.app-layout {
+  min-height: 100vh;
+  background: #111; /* Тёмный фон под всё приложение */
+}
+
+.app-main {
+  /* Компенсация фиксированного Navbar (64px) */
+  padding-top: 100px;
+  margin: 0 auto;
+  padding-left: 20px;
+  padding-right: 20px;
+}
+

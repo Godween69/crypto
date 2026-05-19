@@ -1,0 +1,92 @@
+/* ===== BASE ===== */
+.navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+
+  background: transparent;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.navbar-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+}
+
+/* ===== DESKTOP LAYOUT ===== */
+.navbar-desktop {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.navbar-links {
+  display: flex;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 4px;
+}
+
+/* Ссылки меню: иконка + текст */
+.navbar-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  color: #6b7280;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 8px;
+  transition: color 0.2s ease;
+}
+
+.navbar-link:hover,
+.navbar-link.active {
+  color: #ffffff;
+}
+
+/* Кнопки действий: только иконки */
+.navbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.icon-btn {
+  all: unset; /* Сбрасывает белый фон и рамки браузера */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  color: #6b7280;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+/* При наведении: иконка растёт и меняет цвет */
+.icon-btn:hover {
+  color: #ffffff;
+  transform: scale(1.15);
+}
+
+.icon-btn:active {
+  transform: scale(1);
+}
+
+/* Доступность (виден только при навигации Tab) */
+.icon-btn:focus-visible,
+.navbar-link:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
