@@ -1,9 +1,11 @@
-// front\src\pages\AnaliticPage\AnaliticPage.tsx
+// front/src/pages/AnalyticsPage/AnalyticsPage.tsx
 
-import './AnaliticPage.css'
+import './AnaliticPage.css';
 
-export const AnaliticPage = () => {
-  return (<div>
-    <h3>Аналитика</h3>
-  </div>);
-}
+export const AnalyticPage = () => {
+  return (
+    <div className="analytics-page">
+      <h3>Аналитика</h3>
+    </div>
+  );
+};

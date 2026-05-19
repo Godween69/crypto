@@ -1,21 +1,29 @@
 // front/src/app/router.tsx
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
+
+// Layout
 import { RootLayout } from '../layouts/RootLayout';
 
-// страницы
+// Страницы
 import { PortfolioPage } from '../pages/PortfolioPage/PortfolioPage';
 import { TransactionPage } from '../pages/TransactionsPage/TransactionsPage';
-import { AnaliticPage } from '../pages/AnaliticPage/AnaliticPage';
+import { AnalyticPage } from '../pages/AnaliticPage/AnaliticPage';
+
+import { ErrorPage } from '../pages/ErrorPage/ErrorPage';
 
 export const router = createBrowserRouter([
   {
-    // Корневой лейаут: содержит Navbar + Outlet
+    path: '/',
     element: <RootLayout />,
+    errorElement: <ErrorPage />,
     children: [
-      { path: '/portfolio', element: <PortfolioPage /> },
-      { path: '/portfolio/:symbol', element: <TransactionPage /> },
-      { path: '/analitics', element: < AnaliticPage /> },
+      // Редирект с корня на /portfolio
+      { index: true, element: <Navigate to="/portfolio" replace /> },
 
+      // Основные страницы
+      { path: 'portfolio', element: <PortfolioPage /> },
+      { path: 'portfolio/:symbol', element: <TransactionPage /> },
+      { path: 'analytics', element: <AnalyticPage /> },
     ],
   },
 ]);

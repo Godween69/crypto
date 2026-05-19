@@ -1,150 +1,247 @@
-/* front/src/pages/TransactionPage/TransactionsPage.css */
-
 /* ===== PAGE ===== */
 .tp-page {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 24px 20px 40px;
+  color: #ffffff;
 }
 
+/* ===== HEADER ===== */
 .tp-header {
-  margin-bottom: 16px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tp-header h1 {
+  margin: 0 0 4px;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.tp-subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+/* ===== SECTIONS ===== */
+.tp-section {
+  margin-bottom: 32px;
+}
+
+.tp-section--summary {
+  display: flex;
+  justify-content: center;
 }
 
 /* ===== LIST ===== */
 .tp-list {
-  max-width: 700px;
-  width: 100%;
-
-  margin: 0 auto; /* центрирование */
-  gap: 5px;
-
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
+  gap: 8px;
 }
 
 /* ===== ROW ===== */
 .tp-row {
   display: grid;
-  grid-template-columns: auto 1fr auto; /* left | right | actions */
-
+  grid-template-columns: 130px 1fr 90px;
+  gap: 16px;
   align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid #55555536;
+  transition: border-color 0.2s ease;
+}
 
-  padding: 7px 15px;
-  border-radius: 10px;
-  background: #1a1a1a;
 
+/* ===== CELLS ===== */
+.tp-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tp-cell--type {
+  gap: 6px;
+}
+
+.tp-cell--details {
+  gap: 2px;
+}
+
+.tp-cell--actions {
+  flex-direction: row;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* ===== BADGE ===== */
+.tp-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  width: fit-content;
+}
+
+.tp-badge.buy {
+  background: rgba(76, 175, 79, 0.055);
+  color: #4caf50;
+}
+
+.tp-badge.sell {
+  background: rgba(244, 67, 54, 0.055);
+  color: #f44336;
+}
+
+/* ===== DATE ===== */
+.tp-date {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+/* ===== AMOUNT & PRICE ===== */
+.tp-amount-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tp-amount {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.tp-amount.buy { color: #4caf50; }
+.tp-amount.sell { color: #f44336; }
+
+.tp-at {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.tp-price {
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+.tp-total {
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.tp-total strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* ===== BUTTONS (в стиле PortfolioCard) ===== */
+.btn-delete-icon {
+  all: unset;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.btn-delete-icon:hover:not(:disabled) {
+  color: #b82e2e;
+  transform: scale(1.1);
+}
+
+.btn-delete-icon:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  border-color: #2a2f3a;
+}
+
+/* ===== EMPTY STATE ===== */
+.tp-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #9ca3af;
+  background: #131722;
+  border: 1px dashed #2a2f3a;
+  border-radius: 12px;
+}
+
+.tp-empty p {
+  margin: 0 0 8px;
+  font-size: 15px;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.tp-empty-hint {
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+/* ===== STATE MESSAGES ===== */
+.tp-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #9ca3af;
+}
+
+.tp-state--loading {
+  color: #6b7280;
+}
+
+.tp-state--error {
+  color: #f44336;
+}
+
+.tp-state button {
+  margin-top: 12px;
+  padding: 8px 20px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
   transition: background 0.2s ease;
 }
 
-/* hover строки */
-.tp-row:hover {
-  background: #222;
+.tp-state button:hover {
+  background: #1d4ed8;
 }
 
-/* ===== LEFT ===== */
-.tp-left {
-  display: flex;
-  flex-direction: column;
-  justify-content: center; /* центр по вертикали */
-  min-width: 120px;
-}
-
-.tp-type {
-  font-weight: 600;
-}
-
-/* BUY / SELL цвета */
-.tp-type--BUY {
-  color: #4caf50;
-}
-
-.tp-type--SELL {
-  color: #f44336;
-}
-
-.tp-date {
-  font-size: 12px;
-  opacity: 0.6;
-  margin-top: 4px;
-}
-
-/* ===== RIGHT ===== */
-.tp-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  width: 100%;
-}
-
-/* строка внутри right */
-.tp-line {
-  display: flex;
-  gap: 6px;
-  align-items: baseline;
-}
-
-/* сумма сделки (цвет зависит от типа) */
-.tp-amount {
-  font-weight: 600;
-}
-
-/* BUY зелёный / SELL красный */
-.tp-amount--BUY {
-  color: #4caf50;
-}
-
-.tp-amount--SELL {
-  color: #f44336;
-}
-
-/* meta текст */
-.tp-meta {
-  font-size: 11px;
-  opacity: 0.6;
-}
-
-.tp-strong {
-  font-size: 14px;
-  font-weight: 600;
-}
-
-/* ===== ACTIONS ===== */
-.tp-actions {
-  display: flex;
-  gap: 8px;
-
-  align-items: center; /* фиксируем по центру */
-}
-
-/* кнопки */
-.tp-btn {
-  background: transparent;
-  border: 1px solid #333;
-  color: #ddd;
-
-  padding: 6px 10px;
-  border-radius: 6px;
-
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-/* hover */
-.tp-btn:hover {
-  border-color: #d4af37;
-  color: #d4af37;
-  background: rgba(212, 175, 55, 0.08);
-}
-
-/* delete */
-.tp-btn--danger:hover {
-  border-color: #f44336;
-  color: #f44336;
-  background: rgba(244, 67, 54, 0.08);
-}
-
-/* ===== STATE ===== */
-.tp-state {
-  padding: 20px;
+/* ===== RESPONSIVE ===== */
+@media (max-width: 640px) {
+  .tp-page {
+    padding: 16px 12px 32px;
+  }
+  
+  .tp-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 16px;
+  }
+  
+  .tp-cell--actions {
+    justify-content: flex-start;
+    padding-top: 8px;
+    border-top: 1px solid #2a2f3a;
+  }
+  
+  .tp-header h1 {
+    font-size: 24px;
+  }
 }

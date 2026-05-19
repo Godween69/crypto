@@ -28,8 +28,8 @@ export const SymbolField = React.memo(({
           onKeyDown={onKeyDown}
         >
           {sellableAssets.map((asset) => (
-            <option key={asset.symbol} value={asset.symbol}>
-              {asset.symbol} ({asset.amount})
+            <option key={asset.symbol} value={asset.symbol} >
+              {asset.symbol} {`(${asset.amount} монет)`}
             </option>
           ))}
         </select>
@@ -51,7 +51,8 @@ export const SymbolField = React.memo(({
           }}
           onKeyDown={onKeyDown}
         />
-      )}
-    </div>
+      )
+      }
+    </div >
   );
 });

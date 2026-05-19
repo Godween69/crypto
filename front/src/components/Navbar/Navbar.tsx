@@ -12,7 +12,7 @@ export const Navbar = () => {
 
   const navLinks = [
     { href: "/portfolio", label: "Портфель", icon: <PieChart size={20} /> },
-    { href: "/analitics", label: "Аналитика", icon: <BarChart2 size={20} /> },
+    { href: "/analytics", label: "Аналитика", icon: <BarChart2 size={20} /> },
   ];
 
   const isActive = (path: string) => location.pathname === path;

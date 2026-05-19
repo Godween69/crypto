@@ -1,15 +1,11 @@
-// front\src\pages\TransactionsPage\TransactionsPage.tsx
-
 import { useParams } from "react-router-dom";
+import { Pencil, Trash2 } from "lucide-react"; // 🔥 Иконки из lucide
 
 import { AssetSummary } from "../../components/Portfolio/AssetSummary/AssetSummary";
 import { calculateAssetPosition } from "../../utils/calculateAssetPosition";
-
 import { useTransactions } from "../../hooks/useTransactions";
 import { useDeleteTransaction } from "../../hooks/useDeleteTransaction";
 import { useMarketData } from "../../hooks/useMarketData";
-
-import type { Transaction } from "../../types/transaction.types";
 
 import "./TransactionsPage.css";
 
@@ -17,127 +13,123 @@ export const TransactionPage = () => {
   const { symbol } = useParams<{ symbol: string }>();
   const { mutate: deleteTx } = useDeleteTransaction();
 
-  const isValid = !!symbol;
-
-  // =========================
-  // 1. ТРАНЗАКЦИИ (БД)
-  // =========================
   const transactionsQuery = useTransactions(symbol ?? "");
   const transactions = transactionsQuery.data ?? [];
 
-  // =========================
-  // 2. РЫНОЧНАЯ ЦЕНА (внешний API)
-  // =========================
   const marketQuery = useMarketData(symbol ? [symbol] : []);
   const market = marketQuery.data ?? [];
 
-  // =========================
-  // 3. СОСТОЯНИЯ ЗАГРУЗКИ И ОШИБОК
-  // =========================
-  if (!isValid) return <div className="tp-state">Неверный символ</div>;
-
+  // States
+  if (!symbol) return <div className="tp-state">Неверный символ</div>;
   if (transactionsQuery.isPending || marketQuery.isPending) {
-    return <div className="tp-state">Загрузка...</div>;
+    return <div className="tp-state tp-state--loading">Загрузка...</div>;
   }
-
   if (transactionsQuery.error || marketQuery.error) {
     return (
       <div className="tp-state tp-state--error">
         <p>Ошибка загрузки данных</p>
-        <button onClick={() => {
-          transactionsQuery.refetch();
-          marketQuery.refetch();
-        }}>
+        <button onClick={() => { transactionsQuery.refetch(); marketQuery.refetch(); }}>
           Повторить
         </button>
       </div>
     );
   }
 
-  // =========================
-  // 4. ОБРАБОТЧИКИ
-  // =========================
   const handleDelete = (id: string) => {
     if (!confirm("Удалить транзакцию?")) return;
     deleteTx(id);
   };
 
-  // =========================
-  // 5. РАСЧЁТ ПОЗИЦИИ
-  // =========================
-  // Если монета не найдена в market API → цена = 0.
-  // P&L корректно покажет только реализованную прибыль.
   const currentPrice = market[0]?.currentPrice ?? 0;
-  const position = calculateAssetPosition(symbol!, transactions, currentPrice);
+  const position = calculateAssetPosition(symbol, transactions, currentPrice);
 
-  // =========================
-  // 6. РЕНДЕР
-  // =========================
   return (
     <div className="tp-page">
+      
+      {/* ===== HEADER ===== */}
       <header className="tp-header">
-        <h1>{symbol} — история операций</h1>
+        <h1>{symbol?.toUpperCase()}</h1>
+        <p className="tp-subtitle">История операций</p>
       </header>
 
-      <div className="tp-section">
-        {/* AssetSummary теперь отображает totalPnl и realizedPnl */}
+      {/* ===== ASSET SUMMARY ===== */}
+      <section className="tp-section tp-section--summary">
         <AssetSummary data={position} />
-      </div>
+      </section>
 
-      <div className="tp-list">
+      {/* ===== TRANSACTIONS LIST ===== */}
+      <section className="tp-section tp-section--list">
         {transactions.length === 0 ? (
-          <div className="tp-empty">Нет транзакций</div>
+          <div className="tp-empty">
+            <p>Нет транзакций для {symbol?.toUpperCase()}</p>
+            <span className="tp-empty-hint">Добавь первую покупку или продажу</span>
+          </div>
         ) : (
-          transactions.map((tx: Transaction) => {
-            const total = tx.amount * tx.price;
-            const sign = tx.type === "BUY" ? "+" : "-";
-            const operation = tx.type === "BUY" ? "Купить" : "Продать";
+          <ul className="tp-list">
+            {transactions.map((tx) => {
+              const total = tx.amount * tx.price;
+              const isBuy = tx.type === "BUY";
+              const date = new Date(tx.createdAt);
 
-            return (
-              <div key={tx.id} className="tp-row">
-                <div className="tp-left">
-                  <div className={`tp-type tp-type--${tx.type}`}>
-                    {operation}
-                  </div>
-                  <div className="tp-date">
-                    {new Date(tx.createdAt).toLocaleDateString("ru-RU", {
-                      year: "numeric",
-                      month: "long",
-                      day: "2-digit",
-                    })}
-                  </div>
-                </div>
-
-                <div className="tp-actions">
-                  <button className="tp-btn" disabled title="В разработке">
-                    Edit
-                  </button>
-                  <button
-                    className="tp-btn tp-btn--danger"
-                    onClick={() => handleDelete(tx.id)}
-                  >
-                    Delete
-                  </button>
-                </div>
-
-                <div className="tp-right">
-                  <div className="tp-line">
-                    <span className={`tp-amount tp-amount--${tx.type}`}>
-                      {sign} {tx.amount} {tx.symbol}
+              return (
+                // 🔥 НЕТ onClick на li — строка не кликабельна
+                <li key={tx.id} className="tp-row">
+                  
+                  {/* Левая часть: тип + дата */}
+                  <div className="tp-cell tp-cell--type">
+                    <span className={`tp-badge ${isBuy ? "buy" : "sell"}`}>
+                      {isBuy ? "Покупка" : "Продажа"}
                     </span>
-                    <span className="tp-meta">по</span>
-                    <span className="tp-strong">{tx.price}$</span>
+                    <time className="tp-date">
+                      {date.toLocaleDateString("ru-RU", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </time>
                   </div>
-                  <div className="tp-line">
-                    <span className="tp-meta">всего</span>
-                    <span className="tp-strong">${total.toFixed(2)}</span>
+
+                  {/* Центр: количество, цена, сумма */}
+                  <div className="tp-cell tp-cell--details">
+                    <div className="tp-amount-row">
+                      <span className={`tp-amount ${isBuy ? "buy" : "sell"}`}>
+                        {isBuy ? "+" : "-"}{tx.amount} {symbol?.toUpperCase()}
+                      </span>
+                      <span className="tp-at">@</span>
+                      <span className="tp-price">${tx.price.toFixed(2)}</span>
+                    </div>
+                    <div className="tp-total">
+                      Всего: <strong>${total.toFixed(2)}</strong>
+                    </div>
                   </div>
-                </div>
-              </div>
-            );
-          })
+
+                  {/* Правая часть: кнопки (в стиле PortfolioCard) */}
+                  <div className="tp-cell tp-cell--actions">
+                    <button 
+                      className="btn-delete-icon" 
+                      disabled 
+                      title="Редактирование"
+                      aria-label="Редактировать транзакцию"
+                    >
+                      <Pencil size={18} />
+                    </button>
+                    <button 
+                      className="btn-delete-icon" 
+                      onClick={() => handleDelete(tx.id)}
+                      title="Удалить"
+                      aria-label="Удалить транзакцию"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+
+                </li>
+              );
+            })}
+          </ul>
         )}
-      </div>
+      </section>
+
     </div>
   );
 };
