@@ -20,3 +20,31 @@ body {
 
   font-family: Inter, system-ui, sans-serif;
 }
+
+/* ⚙️ Настройки для Lenis */
+
+/* 1. Отключаем жесткую высоту для Lenis, чтобы он мог рассчитывать прокрутку */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+/* 2. Отключаем нативную плавность браузера, чтобы управлял только Lenis */
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+/* 3. Предотвращаем конфликты при скролле внутри модальных окон или оверлеев */
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+/* 4. Если скролл полностью остановлен (например, открыта модалка) */
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+/* 5. Оптимизация для стики-элементов в Lenis */
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}

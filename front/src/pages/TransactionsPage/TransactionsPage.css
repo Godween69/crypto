@@ -1,37 +1,55 @@
-/* ===== PAGE ===== */
+/* ===== PAGE LAYOUT ===== */
 .tp-page {
   max-width: 800px;
   margin: 0 auto;
   padding: 24px 20px 40px;
   color: #ffffff;
+  min-height: 100vh;
+}
+
+/* ===== STICKY WRAPPER ===== */
+.tp-sticky-wrapper {
+  position: sticky;
+  top: 130px;/* !!!! ВАжно */
+  z-index: 100;
+  background: #111;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 24px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* ===== HEADER ===== */
 .tp-header {
   margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .tp-header h1 {
-  margin: 0 0 4px;
+  margin: 0;
   font-size: 28px;
   font-weight: 800;
   letter-spacing: -0.5px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+/* 🔹 Вторичное название актива (Bitcoin, Cosmos...) */
+.tp-asset-name {
+  color: #6b7280;
+  font-weight: 500;
+  font-size: 24px;
+  opacity: 0.85;
 }
 
 .tp-subtitle {
-  margin: 0;
+  margin: 4px 0 0;
   font-size: 14px;
   color: #9ca3af;
   font-weight: 500;
 }
 
 /* ===== SECTIONS ===== */
-.tp-section {
-  margin-bottom: 32px;
-}
-
 .tp-section--summary {
   display: flex;
   justify-content: center;
@@ -40,7 +58,7 @@
 /* ===== LIST ===== */
 .tp-list {
   list-style: none;
-  margin: 0;
+  margin: 32px 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -58,7 +76,6 @@
   transition: border-color 0.2s ease;
 }
 
-
 /* ===== CELLS ===== */
 .tp-cell {
   display: flex;
@@ -69,11 +86,9 @@
 .tp-cell--type {
   gap: 6px;
 }
-
 .tp-cell--details {
   gap: 2px;
 }
-
 .tp-cell--actions {
   flex-direction: row;
   justify-content: flex-end;
@@ -121,8 +136,12 @@
   font-size: 15px;
 }
 
-.tp-amount.buy { color: #4caf50; }
-.tp-amount.sell { color: #f44336; }
+.tp-amount.buy {
+  color: #4caf50;
+}
+.tp-amount.sell {
+  color: #f44336;
+}
 
 .tp-at {
   color: #6b7280;
@@ -144,7 +163,7 @@
   font-weight: 600;
 }
 
-/* ===== BUTTONS (в стиле PortfolioCard) ===== */
+/* ===== BUTTONS ===== */
 .btn-delete-icon {
   all: unset;
   display: flex;
@@ -167,7 +186,6 @@
 .btn-delete-icon:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-  border-color: #2a2f3a;
 }
 
 /* ===== EMPTY STATE ===== */
@@ -178,6 +196,7 @@
   background: #131722;
   border: 1px dashed #2a2f3a;
   border-radius: 12px;
+  margin-top: 32px;
 }
 
 .tp-empty p {
@@ -202,7 +221,6 @@
 .tp-state--loading {
   color: #6b7280;
 }
-
 .tp-state--error {
   color: #f44336;
 }
@@ -228,20 +246,24 @@
   .tp-page {
     padding: 16px 12px 32px;
   }
-  
+  .tp-sticky-wrapper {
+    top: 56px;
+    padding-bottom: 16px;
+  }
   .tp-row {
     grid-template-columns: 1fr;
     gap: 12px;
     padding: 16px;
   }
-  
   .tp-cell--actions {
     justify-content: flex-start;
     padding-top: 8px;
     border-top: 1px solid #2a2f3a;
   }
-  
   .tp-header h1 {
     font-size: 24px;
+  }
+  .tp-asset-name {
+    font-size: 20px;
   }
 }

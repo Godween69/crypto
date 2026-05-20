@@ -5,7 +5,6 @@
   left: 0;
   right: 0;
   z-index: 1000;
-
   background: transparent;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
@@ -16,7 +15,6 @@
   padding: 0 24px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   height: 56px;
 }
 
@@ -25,6 +23,7 @@
   display: flex;
   align-items: center;
   gap: 24px;
+  width: 100%; /* Занимает всю ширину родителя для корректного распределения */
 }
 
 .navbar-links {
@@ -54,15 +53,17 @@
   color: #ffffff;
 }
 
-/* Кнопки действий: только иконки */
+/* 🔥 БЛОК ДЕЙСТВИЙ: правый край */
 .navbar-actions {
+  margin-left: auto; /* Ключевое: сдвигает flex-элемент в самую правую точку контейнера */
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
+/* Кнопки действий: только иконки */
 .icon-btn {
-  all: unset; /* Сбрасывает белый фон и рамки браузера */
+  all: unset; /* Сбрасывает стили браузера */
   display: flex;
   align-items: center;
   justify-content: center;

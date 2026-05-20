@@ -2,26 +2,43 @@
 .pp-page {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 20px;
   background: #111;
   color: #ffffff;
-  box-sizing: border-box; /* padding не вызывает горизонтальный скролл */
+  box-sizing: border-box;
+  min-height: 100vh; /* Гарантирует, что страница занимает весь экран */
 }
 
-/* Ограничитель ширины контента */
+/* Сводка портфеля (Sticky Header) */
 .pp-section-sum {
+  /* Позиционирование */
+  position: sticky; /* Элемент фиксируется при скролле */
+  top: 100px;        /* Высота вашего навбара. Если он 80px, ставь 80px. Это точка "отрыва" */
+  z-index: 9;       /* Ниже навбара (обычно 10-100), но выше контента (1) */
   width: 100%;
   max-width: 900px;
-  margin: 0 auto;
+  margin: 0 auto;   /* Центрирование внутри потока */
+  
+  /* Визуальные стили */
+  background: #111; /* Фон обязательно должен совпадать с .pp-page, чтобы текст не просвечивал */
   border-bottom: #6969697a 2px solid;
   padding-bottom: 50px;
+  padding-top: 10px; /* Чуть поднял контент, чтобы было "воздуха" */
+  box-sizing: border-box;
+
+  /* ОПТИМИЗАЦИЯ (Убирает дерганье) */
+  will-change: transform; /* Сообщает браузеру, что элемент будет двигаться */
+  transform: translate3d(0, 0, 0); /* Включает аппаратное ускорение (GPU) */
+  backface-visibility: hidden; /* Убирает мерцание */
 }
-/* Ограничитель ширины контента */
+
+/* Ограничитель ширины контента (Сетка) */
 .pp-section {
   width: 100%;
   max-width: 900px;
   margin: 0 auto;
+  
+  /* ВАЖНО: Перенос gap сюда. Это отступ ОТ сводки ДО сетки */
+  margin-top: 20px; 
   padding-top: 30px;
 }
 
@@ -85,7 +102,7 @@
   background: #4caf50;
   color: #ffffff;
   border: none;
-  font-size: 24px; /* ✅ уменьшено для визуального баланса */
+  font-size: 24px;
   font-weight: 400;
   line-height: 1;
   cursor: pointer;
@@ -112,7 +129,6 @@
 @media (max-width: 600px) {
   .pp-page {
     padding: 16px;
-    gap: 16px;
   }
 
   .pp-header h1 {
@@ -131,5 +147,10 @@
 
   .pp-empty {
     padding: 60px 16px;
+  }
+  
+  /* На мобильных уменьшаем отступ между сводкой и сеткой */
+  .pp-section {
+    margin-top: 10px;
   }
 }

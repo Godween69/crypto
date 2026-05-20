@@ -1,11 +1,12 @@
 import { useParams } from "react-router-dom";
-import { Pencil, Trash2 } from "lucide-react"; // 🔥 Иконки из lucide
+import { Pencil, Trash2 } from "lucide-react";
 
 import { AssetSummary } from "../../components/Portfolio/AssetSummary/AssetSummary";
 import { calculateAssetPosition } from "../../utils/calculateAssetPosition";
 import { useTransactions } from "../../hooks/useTransactions";
 import { useDeleteTransaction } from "../../hooks/useDeleteTransaction";
 import { useMarketData } from "../../hooks/useMarketData";
+import { formatCoinName } from "../../utils/formatCoinName"; // 🔹 Импорт утилиты форматирования
 
 import "./TransactionsPage.css";
 
@@ -18,6 +19,15 @@ export const TransactionPage = () => {
 
   const marketQuery = useMarketData(symbol ? [symbol] : []);
   const market = marketQuery.data ?? [];
+
+  // 🔹 ПОЛУЧЕНИЕ ФОРМАТИРОВАННОГО НАЗВАНИЯ
+  // Передаём name, coinId и symbol в утилиту для безопасного fallback
+  const marketItem = market[0];
+  const assetName = formatCoinName(
+    marketItem?.name,
+    marketItem?.coinId,
+    symbol
+  );
 
   // States
   if (!symbol) return <div className="tp-state">Неверный символ</div>;
@@ -40,22 +50,29 @@ export const TransactionPage = () => {
     deleteTx(id);
   };
 
-  const currentPrice = market[0]?.currentPrice ?? 0;
+  const currentPrice = marketItem?.currentPrice ?? 0;
   const position = calculateAssetPosition(symbol, transactions, currentPrice);
 
   return (
     <div className="tp-page">
-      
-      {/* ===== HEADER ===== */}
-      <header className="tp-header">
-        <h1>{symbol?.toUpperCase()}</h1>
-        <p className="tp-subtitle">История операций</p>
-      </header>
 
-      {/* ===== ASSET SUMMARY ===== */}
-      <section className="tp-section tp-section--summary">
-        <AssetSummary data={position} />
-      </section>
+      {/* ===== STICKY HEADER & SUMMARY ===== */}
+      <div className="tp-sticky-wrapper">
+        <header className="tp-header">
+          <h1>
+            {symbol?.toUpperCase()}
+            {/* 🔹 Выводим название только если оно есть и не дублирует тикер */}
+            {assetName && assetName !== symbol?.toUpperCase() && (
+              <span className="tp-asset-name">{assetName}</span>
+            )}
+          </h1>
+          <p className="tp-subtitle">История операций</p>
+        </header>
+
+        <section className="tp-section tp-section--summary">
+          <AssetSummary data={position} />
+        </section>
+      </div>
 
       {/* ===== TRANSACTIONS LIST ===== */}
       <section className="tp-section tp-section--list">
@@ -72,10 +89,7 @@ export const TransactionPage = () => {
               const date = new Date(tx.createdAt);
 
               return (
-                // 🔥 НЕТ onClick на li — строка не кликабельна
                 <li key={tx.id} className="tp-row">
-                  
-                  {/* Левая часть: тип + дата */}
                   <div className="tp-cell tp-cell--type">
                     <span className={`tp-badge ${isBuy ? "buy" : "sell"}`}>
                       {isBuy ? "Покупка" : "Продажа"}
@@ -89,7 +103,6 @@ export const TransactionPage = () => {
                     </time>
                   </div>
 
-                  {/* Центр: количество, цена, сумма */}
                   <div className="tp-cell tp-cell--details">
                     <div className="tp-amount-row">
                       <span className={`tp-amount ${isBuy ? "buy" : "sell"}`}>
@@ -103,18 +116,17 @@ export const TransactionPage = () => {
                     </div>
                   </div>
 
-                  {/* Правая часть: кнопки (в стиле PortfolioCard) */}
                   <div className="tp-cell tp-cell--actions">
-                    <button 
-                      className="btn-delete-icon" 
-                      disabled 
+                    <button
+                      className="btn-delete-icon"
+                      disabled
                       title="Редактирование"
                       aria-label="Редактировать транзакцию"
                     >
                       <Pencil size={18} />
                     </button>
-                    <button 
-                      className="btn-delete-icon" 
+                    <button
+                      className="btn-delete-icon"
                       onClick={() => handleDelete(tx.id)}
                       title="Удалить"
                       aria-label="Удалить транзакцию"
@@ -122,7 +134,6 @@ export const TransactionPage = () => {
                       <Trash2 size={18} />
                     </button>
                   </div>
-
                 </li>
               );
             })}
