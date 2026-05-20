@@ -6,7 +6,7 @@ import { calculateAssetPosition } from "../../utils/calculateAssetPosition";
 import { useTransactions } from "../../hooks/useTransactions";
 import { useDeleteTransaction } from "../../hooks/useDeleteTransaction";
 import { useMarketData } from "../../hooks/useMarketData";
-import { formatCoinName } from "../../utils/formatCoinName"; // 🔹 Импорт утилиты форматирования
+import { formatCoinName } from "../../utils/formatCoinName";
 
 import "./TransactionsPage.css";
 
@@ -20,8 +20,6 @@ export const TransactionPage = () => {
   const marketQuery = useMarketData(symbol ? [symbol] : []);
   const market = marketQuery.data ?? [];
 
-  // 🔹 ПОЛУЧЕНИЕ ФОРМАТИРОВАННОГО НАЗВАНИЯ
-  // Передаём name, coinId и symbol в утилиту для безопасного fallback
   const marketItem = market[0];
   const assetName = formatCoinName(
     marketItem?.name,
@@ -56,12 +54,12 @@ export const TransactionPage = () => {
   return (
     <div className="tp-page">
 
-      {/* ===== STICKY HEADER & SUMMARY ===== */}
+      {/*  Sticky Wrapper: Занимает место в потоке, но прилипает */}
       <div className="tp-sticky-wrapper">
+        
         <header className="tp-header">
           <h1>
             {symbol?.toUpperCase()}
-            {/* 🔹 Выводим название только если оно есть и не дублирует тикер */}
             {assetName && assetName !== symbol?.toUpperCase() && (
               <span className="tp-asset-name">{assetName}</span>
             )}
@@ -72,9 +70,10 @@ export const TransactionPage = () => {
         <section className="tp-section tp-section--summary">
           <AssetSummary data={position} />
         </section>
+        
       </div>
 
-      {/* ===== TRANSACTIONS LIST ===== */}
+      {/* 🔥 Список: Идет сразу после враппера. Без padding-top! */}
       <section className="tp-section tp-section--list">
         {transactions.length === 0 ? (
           <div className="tp-empty">
@@ -108,7 +107,7 @@ export const TransactionPage = () => {
                       <span className={`tp-amount ${isBuy ? "buy" : "sell"}`}>
                         {isBuy ? "+" : "-"}{tx.amount} {symbol?.toUpperCase()}
                       </span>
-                      <span className="tp-at">@</span>
+                      <span className="tp-at">по цене:</span>
                       <span className="tp-price">${tx.price.toFixed(2)}</span>
                     </div>
                     <div className="tp-total">
@@ -117,20 +116,10 @@ export const TransactionPage = () => {
                   </div>
 
                   <div className="tp-cell tp-cell--actions">
-                    <button
-                      className="btn-delete-icon"
-                      disabled
-                      title="Редактирование"
-                      aria-label="Редактировать транзакцию"
-                    >
+                    <button className="btn-delete-icon" disabled title="Редактирование">
                       <Pencil size={18} />
                     </button>
-                    <button
-                      className="btn-delete-icon"
-                      onClick={() => handleDelete(tx.id)}
-                      title="Удалить"
-                      aria-label="Удалить транзакцию"
-                    >
+                    <button className="btn-delete-icon" onClick={() => handleDelete(tx.id)} title="Удалить">
                       <Trash2 size={18} />
                     </button>
                   </div>

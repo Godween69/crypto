@@ -4,8 +4,8 @@
   top: 0;
   left: 0;
   right: 0;
-  z-index: 1000;
-  background: transparent;
+  z-index: 9000;
+  background: #111;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -23,7 +23,7 @@
   display: flex;
   align-items: center;
   gap: 24px;
-  width: 100%; /* Занимает всю ширину родителя для корректного распределения */
+  width: 100%;
 }
 
 .navbar-links {

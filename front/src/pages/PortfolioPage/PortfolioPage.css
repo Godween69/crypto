@@ -5,41 +5,36 @@
   background: #111;
   color: #ffffff;
   box-sizing: border-box;
-  min-height: 100vh; /* Гарантирует, что страница занимает весь экран */
+  min-height: 100vh;
 }
-
-/* Сводка портфеля (Sticky Header) */
+/* Сводка портфеля (Fixed Header) */
 .pp-section-sum {
-  /* Позиционирование */
-  position: sticky; /* Элемент фиксируется при скролле */
-  top: 100px;        /* Высота вашего навбара. Если он 80px, ставь 80px. Это точка "отрыва" */
-  z-index: 9;       /* Ниже навбара (обычно 10-100), но выше контента (1) */
-  width: 100%;
-  max-width: 900px;
-  margin: 0 auto;   /* Центрирование внутри потока */
+  position: fixed;
+  top: 55px;       
+  left: 0;           
+  right: 0;          
+  margin: 0 auto;   
   
-  /* Визуальные стили */
-  background: #111; /* Фон обязательно должен совпадать с .pp-page, чтобы текст не просвечивал */
-  border-bottom: #6969697a 2px solid;
-  padding-bottom: 50px;
-  padding-top: 10px; /* Чуть поднял контент, чтобы было "воздуха" */
-  box-sizing: border-box;
-
-  /* ОПТИМИЗАЦИЯ (Убирает дерганье) */
-  will-change: transform; /* Сообщает браузеру, что элемент будет двигаться */
-  transform: translate3d(0, 0, 0); /* Включает аппаратное ускорение (GPU) */
-  backface-visibility: hidden; /* Убирает мерцание */
+  z-index: 100;
+  background: #111111;
+  width: 100%;
+  max-width: 1000px;   /* Ограничиваем ширину контента */
+  
+  padding: 30px;      /* Внутренние отступы */
+  border-bottom: 2px solid #6969697a;
+  
+  box-sizing: border-box; 
 }
 
 /* Ограничитель ширины контента (Сетка) */
 .pp-section {
-  width: 100%;
+  width: 100%; /* 🔥 Изменено с 80% для выравнивания */
   max-width: 900px;
   margin: 0 auto;
+  padding-top: 150px;
+  padding-bottom: 50px;
   
-  /* ВАЖНО: Перенос gap сюда. Это отступ ОТ сводки ДО сетки */
-  margin-top: 20px; 
-  padding-top: 30px;
+  z-index: 1; /* 🔥 Список под виджетом */
 }
 
 /* Состояния загрузки и ошибок */
@@ -106,9 +101,7 @@
   font-weight: 400;
   line-height: 1;
   cursor: pointer;
-  transition:
-    background 0.2s ease,
-    transform 0.1s ease;
+  transition: background 0.2s ease, transform 0.1s ease;
   align-self: flex-start;
 }
 
@@ -135,7 +128,6 @@
     font-size: 20px;
   }
 
-  /* FAB-кнопка: фиксирована в правом нижнем углу */
   .btn-add {
     position: fixed;
     bottom: 24px;
@@ -148,8 +140,7 @@
   .pp-empty {
     padding: 60px 16px;
   }
-  
-  /* На мобильных уменьшаем отступ между сводкой и сеткой */
+
   .pp-section {
     margin-top: 10px;
   }

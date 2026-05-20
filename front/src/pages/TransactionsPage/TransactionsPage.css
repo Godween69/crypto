@@ -1,32 +1,42 @@
 /* ===== PAGE LAYOUT ===== */
 .tp-page {
-  max-width: 800px;
+  max-width: 1200px; /* Синхронизируем с враппером */
   margin: 0 auto;
-  padding: 24px 20px 40px;
+  padding: 0 20px 40px;
   color: #ffffff;
   min-height: 100vh;
+  /* overflow: visible; - оставляем по умолчанию */
 }
 
-/* ===== STICKY WRAPPER ===== */
+/* ===== STICKY WRAPPER (Чистый поток) ===== */
 .tp-sticky-wrapper {
-  position: sticky;
-  top: 130px;/* !!!! ВАжно */
-  z-index: 100;
-  background: #111;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  padding-bottom: 24px;
+  position: fixed;
+  top: 55px; /* Прилипает под навбаром */
+
   width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+
+  /* 🔥 Слои */
+  z-index: 99; /* Ниже навбара (100), выше списка (1) */
+
+  /* 🔥 Фон обязателен */
+  background: #111;
+
+  /* 🔥 Геометрия */
+  padding: 0 0 24px; /* Убрали боковые отступы, так как они есть у .tp-page */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   box-sizing: border-box;
+
+  isolation: isolate;
 }
 
 /* ===== HEADER ===== */
 .tp-header {
-  margin-bottom: 24px;
 }
 
 .tp-header h1 {
-  margin: 0;
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 800;
   letter-spacing: -0.5px;
   display: flex;
@@ -34,7 +44,6 @@
   gap: 10px;
 }
 
-/* 🔹 Вторичное название актива (Bitcoin, Cosmos...) */
 .tp-asset-name {
   color: #6b7280;
   font-weight: 500;
@@ -53,16 +62,20 @@
 .tp-section--summary {
   display: flex;
   justify-content: center;
+  padding: 0 0 10px; /* Чуть воздуха снизу */
 }
 
-/* ===== LIST ===== */
-.tp-list {
+/* ===== LIST (Без костылей!) ===== */
+.tp-section--list {
+  padding-top: 260px;
+  margin: 0;
   list-style: none;
-  margin: 32px 0 0;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
+
+  /* 🔥 z-index меньше, чем у sticky-хедера */
+  z-index: 1;
 }
 
 /* ===== ROW ===== */
@@ -71,18 +84,20 @@
   grid-template-columns: 130px 1fr 90px;
   gap: 16px;
   align-items: center;
-  padding: 14px 16px;
+  padding: 12px 16px; /* Чуть больше воздуха внутри строки */
+  background: #111; /* Фон строки, чтобы перекрывать линии */
   border-bottom: 1px solid #55555536;
+  border-radius: 8px; /* Скругление для красоты */
   transition: border-color 0.2s ease;
 }
 
-/* ===== CELLS ===== */
+/* ... Остальные стили (Badge, Cells, Buttons) без изменений ... */
+
 .tp-cell {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-
 .tp-cell--type {
   gap: 6px;
 }
@@ -95,7 +110,6 @@
   gap: 6px;
 }
 
-/* ===== BADGE ===== */
 .tp-badge {
   display: inline-flex;
   align-items: center;
@@ -106,64 +120,53 @@
   font-weight: 600;
   width: fit-content;
 }
-
 .tp-badge.buy {
-  background: rgba(76, 175, 79, 0.055);
+  background: rgba(76, 175, 79, 0.1);
   color: #4caf50;
 }
-
 .tp-badge.sell {
-  background: rgba(244, 67, 54, 0.055);
+  background: rgba(244, 67, 54, 0.1);
   color: #f44336;
 }
 
-/* ===== DATE ===== */
 .tp-date {
   font-size: 12px;
   color: #6b7280;
 }
 
-/* ===== AMOUNT & PRICE ===== */
 .tp-amount-row {
   display: flex;
   align-items: baseline;
   gap: 6px;
   flex-wrap: wrap;
 }
-
 .tp-amount {
   font-weight: 700;
   font-size: 15px;
 }
-
 .tp-amount.buy {
   color: #4caf50;
 }
 .tp-amount.sell {
   color: #f44336;
 }
-
 .tp-at {
   color: #6b7280;
-  font-size: 14px;
+  font-size: 13px;
 }
-
 .tp-price {
   color: #9ca3af;
   font-size: 14px;
 }
-
 .tp-total {
-  font-size: 13px;
+  font-size: 15px;
   color: #9ca3af;
 }
-
 .tp-total strong {
   color: #ffffff;
   font-weight: 600;
 }
 
-/* ===== BUTTONS ===== */
 .btn-delete-icon {
   all: unset;
   display: flex;
@@ -177,18 +180,15 @@
   transition: all 0.2s ease;
   flex-shrink: 0;
 }
-
 .btn-delete-icon:hover:not(:disabled) {
   color: #b82e2e;
   transform: scale(1.1);
 }
-
 .btn-delete-icon:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-/* ===== EMPTY STATE ===== */
 .tp-empty {
   text-align: center;
   padding: 40px 20px;
@@ -198,33 +198,28 @@
   border-radius: 12px;
   margin-top: 32px;
 }
-
 .tp-empty p {
   margin: 0 0 8px;
   font-size: 15px;
   color: #ffffff;
   font-weight: 500;
 }
-
 .tp-empty-hint {
   font-size: 13px;
   opacity: 0.8;
 }
 
-/* ===== STATE MESSAGES ===== */
 .tp-state {
   text-align: center;
   padding: 40px 20px;
   color: #9ca3af;
 }
-
 .tp-state--loading {
   color: #6b7280;
 }
 .tp-state--error {
   color: #f44336;
 }
-
 .tp-state button {
   margin-top: 12px;
   padding: 8px 20px;
@@ -234,9 +229,7 @@
   border-radius: 8px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s ease;
 }
-
 .tp-state button:hover {
   background: #1d4ed8;
 }
@@ -244,12 +237,19 @@
 /* ===== RESPONSIVE ===== */
 @media (max-width: 640px) {
   .tp-page {
-    padding: 16px 12px 32px;
+    padding: 0 12px 32px;
   }
+
   .tp-sticky-wrapper {
     top: 56px;
     padding-bottom: 16px;
   }
+
+  /* На мобильных отступ не нужен, поток сам все расставит */
+  .tp-section--list {
+    padding-top: 0;
+  }
+
   .tp-row {
     grid-template-columns: 1fr;
     gap: 12px;

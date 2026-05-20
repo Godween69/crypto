@@ -196,12 +196,12 @@ export const PortfolioPage = () => {
   return (
     <div className="pp-page">
 
-      {/* Сводка портфеля: закрепляем сверху при скролле */}
-      <div className="pp-section-sum ">
+      {/* Сводка портфеля: вложено, изменение за 24ч, общий PnL */}
+      <div className="pp-section-sum">
         <PortfolioSummary items={view} />
       </div>
 
-      {/* Сетка карточек активов — скроллится под зафиксированной сводкой */}
+      {/* Сетка карточек активов */}
       <div className="pp-section">
         <PortfolioGrid
           items={view}

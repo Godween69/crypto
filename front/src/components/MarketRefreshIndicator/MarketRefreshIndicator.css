@@ -1,0 +1,28 @@
+.market-refresh-bar {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 0 24px 16px;
+  position: relative;
+  /* Убираем transition — анимация теперь полностью на JS + rAF */
+}
+
+.market-refresh-bar__fill {
+  height: 100%;
+  /* Градиент для визуального эффекта */
+  background: linear-gradient(90deg, #3b82f6, #06b6d4);
+  width: 0%; /* Стартовое значение, будет перезаписано через ref */
+  
+  /* Оптимизация для GPU: анимируем только composite-слой */
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* Адаптив */
+@media (max-width: 600px) {
+  .market-refresh-bar {
+    margin: 0 16px 12px;
+    height: 3px;
+  }
+}
