@@ -7,12 +7,12 @@ import { TransactionModule } from './modules/transaction/transaction.module';
 import { PortfolioModule } from './modules/portfolio/portfolio.module';
 import { MarketModule } from './modules/market/market.module';
 import { RedisModule } from './redis/redis.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
+    ScheduleModule.forRoot(),
+    ConfigModule.forRoot({ isGlobal: true }),
 
     TransactionModule,
     PortfolioModule,

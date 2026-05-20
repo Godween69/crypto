@@ -5,98 +5,118 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import axios from 'axios';
-
 import { CoinResolverService } from './coin-resolver.service';
 import { RedisService } from '../../redis/redis.service';
-
+import { MarketGateway } from './market.gateway';
+import { PrismaService } from '../../common/prisma/prisma.service';
 import { MarketData, CoinGeckoMarket } from './types/market.types';
 
 @Injectable()
 export class MarketService implements OnModuleInit {
   private readonly logger = new Logger(MarketService.name);
-
-  // TTL для Redis cache (300 секунд)
-  // market данные считаются "свежими" 5 минуты
-  private readonly CACHE_TTL = 300;
+  private readonly CACHE_TTL = 300; // время жизни кэша в секундах
 
   constructor(
-    private config: ConfigService,
-    private resolver: CoinResolverService, // symbol -> geckoId resolver
+    private readonly config: ConfigService,
+    private readonly resolver: CoinResolverService,
     private readonly redis: RedisService,
+    private readonly gateway: MarketGateway, // шлюз для глобального broadcast
+    private readonly prisma: PrismaService, // доступ к таблице транзакций
   ) {}
 
-  // вызывается при старте модуля
   async onModuleInit() {
-    // прогреваем resolver:
-    // загружаем symbol → geckoId mapping в память
-    await this.resolver.init();
+    await this.resolver.init(); // прогреваем маппинг symbol → geckoId при старте
   }
 
-  // Метод получения market data
   async getMarketData(symbols: string[]): Promise<MarketData[]> {
     const apiKey = this.config.get<string>('COINGECKO_API_KEY');
     const baseUrl = this.config.get<string>('COINGECKO_API_URL');
-
-    // 1. РЕЗОЛВИНГ СИМВОЛОВ В COINGECKO IDS
-    // BTC → bitcoin ETH → ethereum
-    // это нужно, потому что CoinGecko работает только с ids
-    const resolved = await this.resolver.resolveMany(symbols);
-
-    // 2. ДЕЛАЕМ СТАБИЛЬНЫЙ CACHE KEY
-    // сортируем, чтобы порядок не влиял:
-    // BTC,ETH == ETH,BTC
+    const resolved = await this.resolver.resolveMany(symbols); // резолвим символы в ID
     const ids = resolved
       .map((c) => c.id)
       .sort()
-      .join(',');
-
+      .join(','); // формируем детерминированный ключ
     const cacheKey = `market:${ids}`;
 
     try {
-      // 3. REDIS (быстрый ответ 1-2ms)
       const cached = await this.redis.get<MarketData[]>(cacheKey);
+      if (cached) return cached; // возвращаем из кэша при попадании
 
-      if (cached) return cached; // Если есть -> мгновенный ответ, нет -> идем дальше
-
-      // 4. ВНЕШНИЙ API (CoinGecko fallback)
       const { data } = await axios.get<CoinGeckoMarket>(
         `${baseUrl}/coins/markets`,
         {
-          params: {
-            ids, // comma-separated coin ids
-            vs_currency: 'usd',
-            price_change_percentage: '24h',
-          },
-          headers: {
-            'x-cg-demo-api-key': apiKey,
-          },
-          timeout: 5000, // защита от зависших запросов
+          params: { ids, vs_currency: 'usd', price_change_percentage: '24h' },
+          headers: { 'x-cg-demo-api-key': apiKey },
+          timeout: 5000, // ограничиваем время ожидания внешнего API
         },
       );
 
-      // 5. НОРМАЛИЗАЦИЯ (DTO mapping)
-      // превращаем сырой CoinGecko ответ в наш формат
       const result: MarketData[] = data.map((coin) => ({
         coinId: coin.id,
         symbol: coin.symbol.toUpperCase(),
         currentPrice: coin.current_price ?? 0,
         change24h: coin.price_change_percentage_24h ?? 0,
         image: coin.image,
-
-        // market_cap_rank может быть null -> оставляем null
         rank: coin.market_cap_rank ?? null,
       }));
 
-      // 6. КЛАДЕМ В REDIS (TTL = 300s)
-      await this.redis.set(cacheKey, result, this.CACHE_TTL);
-
+      await this.redis.set(cacheKey, result, this.CACHE_TTL); // сохраняем нормализованные данные
+      const expiresAt = Date.now() + this.CACHE_TTL * 1000; // вычисляем абсолютную метку истечения
+      this.gateway.setNextUpdateAt(expiresAt); // синхронизируем метку в шлюзе
+      this.gateway.broadcastUpdate(result, expiresAt); // уведомляем все вкладки об обновлении
       return result;
     } catch (e) {
-      // единая точка ошибки
       this.logger.error('Market fetch failed', e);
-
       throw new HttpException('Market fetch failed', 500);
+    }
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async handleCronMarketUpdate() {
+    const records = await this.prisma.transaction.findMany({
+      select: { symbol: true },
+    }); // берём все символы из БД
+    const uniqueSymbols = [...new Set(records.map((r) => r.symbol))]; // дедуплицируем монеты
+    if (uniqueSymbols.length === 0) return; // пропускаем цикл при пустой таблице
+
+    const resolved = await this.resolver.resolveMany(uniqueSymbols); // резолвим в geckoId
+    const ids = resolved
+      .map((c) => c.id)
+      .sort()
+      .join(','); // формируем стабильный ключ
+    const apiKey = this.config.get<string>('COINGECKO_API_KEY');
+    const baseUrl = this.config.get<string>('COINGECKO_API_URL');
+
+    try {
+      const { data } = await axios.get<CoinGeckoMarket>(
+        `${baseUrl}/coins/markets`,
+        {
+          params: { ids, vs_currency: 'usd', price_change_percentage: '24h' },
+          headers: { 'x-cg-demo-api-key': apiKey },
+          timeout: 5000, // защита от зависших запросов
+        },
+      );
+
+      const allData: MarketData[] = data.map((coin) => ({
+        coinId: coin.id,
+        symbol: coin.symbol.toUpperCase(),
+        currentPrice: coin.current_price ?? 0,
+        change24h: coin.price_change_percentage_24h ?? 0,
+        image: coin.image,
+        rank: coin.market_cap_rank ?? null,
+      }));
+      // обновляем глобальный кэш
+      await this.redis.set(`market:${ids}`, allData, this.CACHE_TTL);
+      // вычисляем метку следующего цикла
+      const nextAt = Date.now() + this.CACHE_TTL * 1000;
+      // сохраняем метку в шлюзе
+      this.gateway.setNextUpdateAt(nextAt);
+      // пушим данные и метку всем вкладкам
+      this.gateway.broadcastUpdate(allData, nextAt);
+    } catch (e) {
+      this.logger.error('Cron market update failed', e);
     }
   }
 }

@@ -61,7 +61,7 @@
 /* ===== SECTIONS ===== */
 .tp-section--summary {
   display: flex;
-  justify-content: center;
+  justify-content:left;
   padding: 0 0 10px; /* Чуть воздуха снизу */
 }
 

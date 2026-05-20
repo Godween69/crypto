@@ -1,29 +1,30 @@
-import { useEffect, useState } from 'react';
-import './MarketRefreshIndicator.css';
+// front/src/components/MarketRefreshIndicator/MarketRefreshIndicator.tsx
 
-// Компонент больше не принимает пропсы! Он автономный.
-// Просто тикает 5 минут и сбрасывается.
-export const MarketRefreshIndicator = () => {
-  const [progress, setProgress] = useState(0);
+import { useEffect, useState } from 'react';
+
+type Props = { nextUpdateAt: number; intervalMs?: number };
+
+export const MarketRefreshIndicator = ({ nextUpdateAt, intervalMs = 300_000 }: Props) => {
+  // ленивая инициализация: вычисляется один раз при маунте, соблюдая чистоту рендера
+  const [remainingMs, setRemainingMs] = useState(() => Math.max(0, nextUpdateAt - Date.now()));
 
   useEffect(() => {
-    const duration = 300; // 5 минут = 300 секунд
-    const step = 100 / duration; // ~0.33% в секунду
+    const tick = () => {
+      setRemainingMs(Math.max(0, nextUpdateAt - Date.now())); // обновляем остаток каждую секунду
+    };
+    tick(); // мгновенный расчёт при маунте или смене серверной метки
+    const timer = setInterval(tick, 1000); // таймер для плавного обновления UI
+    return () => clearInterval(timer); // очистка интервала при анмаунте или смене зависимостей
+  }, [nextUpdateAt, intervalMs]);
 
-    // Интервал обновляет прогресс каждую секунду
-    const interval = setInterval(() => {
-      setProgress((prev) => {
-        const next = prev + step;
-        return next >= 100 ? 100 : next;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []); //  Пустой массив зависимостей = запускается 1 раз при монтировании
+  // чистые вычисления на основе состояния (без Date.now() в фазе рендера)
+  const progress = 1 - remainingMs / intervalMs;
+  const secondsLeft = Math.ceil(remainingMs / 1000);
 
   return (
-    <div className="market-refresh-bar" title="Цены обновятся через 5 минут">
-      <div className="market-refresh-bar__fill" style={{ width: `${progress}%` }} />
+    <div className="ttl-bar-track">
+      <div className="ttl-bar-fill" style={{ width: `${progress * 100}%` }} />
+      <span className="ttl-bar-label">{secondsLeft}с</span>
     </div>
   );
 };

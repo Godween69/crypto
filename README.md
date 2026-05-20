@@ -60,6 +60,7 @@ crypto
 │  │  │     └─ types
 │  │  │        └─ transaction.types.ts
 │  │  └─ redis
+│  │     ├─ info.txt
 │  │     ├─ redis.module.ts
 │  │     └─ redis.service.ts
 │  ├─ tsconfig.build.json
@@ -85,6 +86,10 @@ crypto
    │  ├─ App.css
    │  ├─ App.tsx
    │  ├─ components
+   │  │  ├─ MarketRefreshIndicator
+   │  │  │  ├─ info.md
+   │  │  │  ├─ MarketRefreshIndicator.css
+   │  │  │  └─ MarketRefreshIndicator.tsx
    │  │  ├─ Modal
    │  │  │  ├─ Modal.css
    │  │  │  ├─ ModalContext.ts

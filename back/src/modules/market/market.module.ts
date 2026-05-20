@@ -7,11 +7,17 @@ import { CoinRepository } from './coin.repository';
 
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { RedisModule } from '../../redis/redis.module';
+import { MarketGateway } from './market.gateway'; // импорт шлюза
 
 @Module({
   imports: [PrismaModule, RedisModule],
   controllers: [MarketController],
-  providers: [MarketService, CoinResolverService, CoinRepository],
+  providers: [
+    MarketService,
+    CoinResolverService,
+    CoinRepository,
+    MarketGateway,
+  ],
   exports: [MarketService],
 })
 export class MarketModule {}
