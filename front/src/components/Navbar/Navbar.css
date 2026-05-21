@@ -94,7 +94,6 @@
 
 .navbar-ttl-wrapper {
   display: flex;
-  align-items: center;
   padding: 0 12px;
   min-width: 150px; /* фиксируем минимальную ширину для предотвращения layout shift */
 }

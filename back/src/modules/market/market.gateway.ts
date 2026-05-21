@@ -1,4 +1,3 @@
-// back/src/modules/market/market.gateway.ts
 import {
   WebSocketGateway,
   WebSocketServer,
@@ -10,26 +9,32 @@ import { Logger } from '@nestjs/common';
 
 @WebSocketGateway({ cors: { origin: '*' }, namespace: 'market' })
 export class MarketGateway implements OnGatewayConnection, OnGatewayDisconnect {
-  // NestJS инициализирует поле после подъёма адаптера
-  @WebSocketServer() server!: Server;
+  @WebSocketServer() server!: Server; // NestJS инициализирует после подъёма адаптера
   private readonly logger = new Logger(MarketGateway.name);
-
-  // абсолютная метка следующего обновления
-  private nextUpdateAt = Date.now() + 300_000;
+  private activeConnections = 0; // счётчик живых WS-соединений
+  private nextUpdateAt = Date.now() + 300_000; // метка следующего обновления
 
   handleConnection(client: Socket) {
-    // фиксируем открытие вкладки
-    this.logger.log(`Клиент подключён: ${client.id}`);
-    // отправляем метку при входе
-    client.emit('market:ttl_sync', { nextUpdateAt: this.nextUpdateAt });
+    this.activeConnections++; // фиксируем новое подключение
+    this.logger.log(
+      `WS подключён: ${client.id} (активных: ${this.activeConnections})`,
+    );
+    client.emit('market:ttl_sync', { nextUpdateAt: this.nextUpdateAt }); // отправляем метку при входе
   }
-  // фиксируем закрытие вкладки
+
   handleDisconnect(client: Socket) {
-    this.logger.log(`Клиент отключён: ${client.id}`);
+    this.activeConnections = Math.max(0, this.activeConnections - 1); // безопасно уменьшаем счётчик
+    this.logger.log(
+      `WS отключён: ${client.id} (активных: ${this.activeConnections})`,
+    );
   }
-  // обновляем глобальную метку после крона
+
+  hasActiveClients(): boolean {
+    return this.activeConnections > 0; // возвращаем true только при наличии живых сокетов
+  }
+
   setNextUpdateAt(timestamp: number) {
-    this.nextUpdateAt = timestamp;
+    this.nextUpdateAt = timestamp; // обновляем метку после успешного крона
   }
 
   broadcastUpdate(data: unknown, nextUpdateAt: number) {

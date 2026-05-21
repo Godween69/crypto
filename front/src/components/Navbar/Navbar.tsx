@@ -5,7 +5,7 @@ import { PieChart, BarChart2, PlusCircle, Settings, User } from "lucide-react";
 import { useModal } from "../../hooks/useModal";
 import { TransactionForm } from "../TransactionForm/TransactionForm";
 import { useMarketSocket } from "../../hooks/useMarketSocket"; // подписка на WS-канал
-import { MarketRefreshIndicator } from "../MarketRefreshIndicator/MarketRefreshIndicator"; // TTL-индикатор
+import { CircularTtlIndicator } from "../MarketRefreshIndicator/CircularTtlIndicator";
 
 import "./Navbar.css";
 
@@ -45,7 +45,7 @@ export const Navbar = () => {
 
           {/* Блок визуализации TTL кэша */}
           <div className="navbar-ttl-wrapper">
-            <MarketRefreshIndicator nextUpdateAt={nextUpdateAt} />
+            <CircularTtlIndicator nextUpdateAt={nextUpdateAt} />
           </div>
 
           <div className="navbar-actions">

@@ -75,11 +75,24 @@ export class MarketService implements OnModuleInit {
 
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleCronMarketUpdate() {
+    if (!this.gateway.hasActiveClients()) {
+      this.logger.debug('Cron skipped: нет активных WS-клиентов'); // жёсткий выход до любых запросов
+      return;
+    }
+
+    this.logger.log('Cron started: обнаружены активные клиенты');
+    
+    // берём символы из БД
     const records = await this.prisma.transaction.findMany({
       select: { symbol: true },
-    }); // берём все символы из БД
-    const uniqueSymbols = [...new Set(records.map((r) => r.symbol))]; // дедуплицируем монеты
-    if (uniqueSymbols.length === 0) return; // пропускаем цикл при пустой таблице
+    });
+    // дедуплицируем монеты
+    // символ запрашивается только один раз, не важно, сколько транзакций с ним в базе
+    const uniqueSymbols = [...new Set(records.map((r) => r.symbol))];
+    if (uniqueSymbols.length === 0) {
+      this.logger.debug('Cron skipped: портфель пуст');
+      return;
+    }
 
     const resolved = await this.resolver.resolveMany(uniqueSymbols); // резолвим в geckoId
     const ids = resolved
@@ -107,14 +120,12 @@ export class MarketService implements OnModuleInit {
         image: coin.image,
         rank: coin.market_cap_rank ?? null,
       }));
-      // обновляем глобальный кэш
-      await this.redis.set(`market:${ids}`, allData, this.CACHE_TTL);
-      // вычисляем метку следующего цикла
-      const nextAt = Date.now() + this.CACHE_TTL * 1000;
-      // сохраняем метку в шлюзе
-      this.gateway.setNextUpdateAt(nextAt);
-      // пушим данные и метку всем вкладкам
-      this.gateway.broadcastUpdate(allData, nextAt);
+
+      await this.redis.set(`market:${ids}`, allData, this.CACHE_TTL); // обновляем глобальный кэш
+      const nextAt = Date.now() + this.CACHE_TTL * 1000; // вычисляем метку следующего цикла
+      this.gateway.setNextUpdateAt(nextAt); // сохраняем метку в шлюзе
+      this.gateway.broadcastUpdate(allData, nextAt); // пушим данные и метку всем вкладкам
+      this.logger.log('Cron finished: Redis обновлён, broadcast выполнен');
     } catch (e) {
       this.logger.error('Cron market update failed', e);
     }

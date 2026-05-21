@@ -1,0 +1,31 @@
+/* front/src/components/MarketRefreshIndicator/CircularTtlIndicator.css */
+.circular-ttl {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.circular-ttl .track {
+  stroke: #494949; /* нейтральный трек */
+}
+
+.circular-ttl .progress {
+  stroke: #e7e7e77e; /* основной синий прогресс */
+  transition: stroke-dashoffset 1s linear, stroke 0.3s ease;
+}
+
+.circular-ttl.pulse .progress {
+  stroke: #22c55e; /* зелёный сигнал при обновлении */
+  filter: drop-shadow(0 0 6px rgba(34, 197, 94, 0.6));
+}
+
+.circular-ttl .ttl-text {
+  position: absolute;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  user-select: none;
+}

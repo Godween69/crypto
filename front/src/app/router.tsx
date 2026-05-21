@@ -7,7 +7,7 @@ import { RootLayout } from '../layouts/RootLayout';
 // Страницы
 import { PortfolioPage } from '../pages/PortfolioPage/PortfolioPage';
 import { TransactionPage } from '../pages/TransactionsPage/TransactionsPage';
-import { AnalyticPage } from '../pages/AnaliticPage/AnaliticPage';
+import { AnalyticsPage } from '../pages/AnalyticsPage/AnalyticsPage';
 
 import { ErrorPage } from '../pages/ErrorPage/ErrorPage';
 
@@ -23,7 +23,7 @@ export const router = createBrowserRouter([
       // Основные страницы
       { path: 'portfolio', element: <PortfolioPage /> },
       { path: 'portfolio/:symbol', element: <TransactionPage /> },
-      { path: 'analytics', element: <AnalyticPage /> },
+      { path: 'analytics', element: <AnalyticsPage /> },
     ],
   },
 ]);
