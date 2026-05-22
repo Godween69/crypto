@@ -1,3 +1,4 @@
+// front/src/utils/calculateAssetPosition.ts
 import type { Transaction } from "../types/transaction.types";
 import type { AssetPosition } from "../types/portfolio.types";
 
@@ -12,60 +13,52 @@ export const calculateAssetPosition = (
   transactions: Transaction[],
   currentPrice: number,
 ): AssetPosition => {
-  //
   const filtered = transactions
     .filter((t) => t.symbol === symbol)
-    // Сортировка по времени критична: если продать раньше, чем купить, логика сломается.
     .sort(
       (a, b) =>
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    );
+    ); // хронологический порядок
 
-  //  Инициализация аккумуляторов
   let amount = 0;
-  let costBasis = 0; // Себестоимость текущего остатка
-  let realizedPnl = 0; // Зафиксированная прибыль от продаж
-  let totalInvested = 0; // Всего вложено (все BUY)
+  let costBasis = 0; // себестоимость текущего остатка
+  let realizedPnl = 0; // зафиксированная прибыль от продаж
+  let totalInvested = 0; // исторические вложения (все BUY)
 
   for (const t of filtered) {
     if (t.type === "BUY") {
       amount += t.amount;
-      costBasis += t.amount * t.price; // Увеличиваем себестоимость остатка
-      totalInvested += t.amount * t.price; // Копим исторические вложения
+      costBasis += t.amount * t.price;
+      totalInvested += t.amount * t.price;
     } else {
-      if (amount <= 0) continue; // Защита от продажи в минус
-
-      const sellAmount = Math.min(t.amount, amount); // Нельзя продать больше, чем есть
-      const avgPrice = costBasis / amount; // Средняя цена текущего остатка
-
-      // Фиксируем прибыль/убыток по этой продаже
-      realizedPnl += (t.price - avgPrice) * sellAmount;
-
+      if (amount <= 0) continue; // защита от продажи в минус
+      const sellAmount = Math.min(t.amount, amount);
+      const avgPrice = costBasis / amount;
+      realizedPnl += (t.price - avgPrice) * sellAmount; // фиксируем прибыль/убыток
       amount -= sellAmount;
-      costBasis -= sellAmount * avgPrice; // Пропорционально уменьшаем себестоимость
+      costBasis -= sellAmount * avgPrice; // пропорционально уменьшаем себестоимость
     }
   }
 
   const safeAmount = Math.max(0, amount);
   const safePrice = Math.max(0, currentPrice ?? 0);
+  const totalValue = safeAmount * safePrice;
+  const unrealizedPnl = totalValue - costBasis; // PnL по текущему остатку
+  const totalPnl = unrealizedPnl + realizedPnl; // общий PnL для UI
 
-  // Средняя цена от ВСЕХ покупок, а не от остатка
+  // исторические данные для расчёта средней цены и процентов
   const totalBoughtAmount = filtered
     .filter((t) => t.type === "BUY")
     .reduce((sum, t) => sum + t.amount, 0);
   const totalBoughtCost = filtered
     .filter((t) => t.type === "BUY")
     .reduce((sum, t) => sum + t.amount * t.price, 0);
-    
-  const avgBuyPrice = totalBoughtAmount > 0 ? totalBoughtCost / totalBoughtAmount : 0;
-  const totalValue = safeAmount * safePrice;
+  const avgBuyPrice =
+    totalBoughtAmount > 0 ? totalBoughtCost / totalBoughtAmount : 0;
 
-  const unrealizedPnl = totalValue - costBasis; // PnL по текущему остатку
-  const totalPnl = unrealizedPnl + realizedPnl; // Общий PnL (то, что нужно в UI)
-
-  // Процент считаем от исторических вложений, чтобы не ломался при закрытии позиции
+  // процент считаем от исторических вложений, чтобы метрика не ломалась при закрытии
   const totalPnlPercent =
-    totalInvested > 0 ? (totalPnl / totalInvested) * 100 : 0;
+    totalBoughtCost > 0 ? (totalPnl / totalBoughtCost) * 100 : 0;
   const unrealizedPnlPercent =
     costBasis > 0 ? (unrealizedPnl / costBasis) * 100 : 0;
 
@@ -74,12 +67,12 @@ export const calculateAssetPosition = (
     amount: round(safeAmount),
     currentPrice: round(safePrice),
     totalValue: round(totalValue),
-    invested: round(costBasis), // Себестоимость остатка
-    totalInvested: round(totalInvested), // Всего вложено за всё время
-    pnl: round(unrealizedPnl), // Нереализованный
+    invested: round(costBasis), // себестоимость текущего остатка
+    totalInvested: round(totalInvested), // всего вложено за всё время
+    pnl: round(unrealizedPnl), // нереализованный
     pnlPercent: round(unrealizedPnlPercent),
-    realizedPnl: round(realizedPnl), // Реализованный
-    totalPnl: round(totalPnl), // Общий (то, что нужно в UI)
+    realizedPnl: round(realizedPnl), // реализованный
+    totalPnl: round(totalPnl), // общий (главный показатель)
     totalPnlPercent: round(totalPnlPercent),
     avgBuyPrice: round(avgBuyPrice),
   };

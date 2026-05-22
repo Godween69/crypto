@@ -1,3 +1,5 @@
+// back/prisma/schema.prisma
+
 // npx prisma migrate dev --name описание
 // npx prisma migrate reset - удаляет ВСЕ таблицы
 // npx prisma generate - пересобирает Prisma Client
@@ -18,23 +20,30 @@ datasource db {
 
 model Transaction {
   id        String   @id @default(cuid()) // уникальный идентификатор записи
-  symbol    String // тикер
+  symbol    String // тикер актива
   type      String // BUY / SELL
   amount    Float // количество
-  price     Float // цена
+  price     Float // цена на момент сделки
   createdAt DateTime @default(now()) // момент события
 }
 
 model Coin {
-  id Int @id @default(autoincrement())
-
-  symbol  String @unique // то, что приходит от меня BTC, ETH, ADA
-  geckoId String @unique // то, что нужно CoinGecko bitcoin, ethereum (CoinGecko id)
-
-  name String? // имя (optional)
-
+  id        Int      @id @default(autoincrement())
+  symbol    String   @unique // тикер (BTC, ETH)
+  geckoId   String   @unique // идентификатор CoinGecko
+  name      String? // полное название (опционально)
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt // контроль обновлений
+  updatedAt DateTime @updatedAt
 
   @@index([symbol])
+}
+
+model PortfolioSnapshot {
+  id          String   @id @default(cuid())
+  timestamp   DateTime // момент фиксации стоимости
+  granularity String // '1h' | '1d' | '1w' | '1m'
+  totalValue  Float // общая стоимость портфеля в USD
+
+  @@index([granularity, timestamp]) // составной индекс для range-запросов
+  @@map("portfolio_snapshots")
 }

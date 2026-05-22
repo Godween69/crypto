@@ -5,6 +5,8 @@ import { usePortfolio } from '../../../hooks/usePortfolio';
 import { useMarketData } from '../../../hooks/useMarketData';
 import { CHART_CONFIG } from './chart.config';
 
+import './PortfolioDistributionChart.css'
+
 export const PortfolioDistributionChart = () => {
   const containerRef = useRef<HTMLDivElement>(null); // ссылка на DOM-контейнер
   const chartRef = useRef<echarts.ECharts | null>(null); // ссылка на инстанс ECharts

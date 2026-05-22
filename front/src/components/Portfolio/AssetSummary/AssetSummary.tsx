@@ -1,3 +1,5 @@
+// front\src\components\Portfolio\AssetSummary\AssetSummary.tsx
+
 import type { AssetPosition } from "../../../types/portfolio.types";
 import "./AssetSummary.css";
 

@@ -1,3 +1,4 @@
+// front/src/components/TransactionForm/TransactionForm.tsx
 import { useTransactionForm, type TransactionFormValues } from './useTransactionForm';
 import { SymbolField } from './SymbolField';
 import { AmountField } from './AmountField';

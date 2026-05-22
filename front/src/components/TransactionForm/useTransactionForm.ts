@@ -1,3 +1,4 @@
+// front/src/components/TransactionForm/useTransactionForm.ts
 import { useEffect, useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -82,7 +83,7 @@ export const useTransactionForm = ({
   );
   const marketPrice = marketData[0]?.currentPrice ?? 0;
 
-  // ✅ Фоллбэк: если name не пришёл — генерируем из coinId
+  // фоллбэк: если name не пришёл — генерируем из coinId
   const marketName = useMemo(() => {
     const item = marketData[0];
     if (!item) return "";
@@ -140,12 +141,14 @@ export const useTransactionForm = ({
       type: data.type,
       amount: Number(data.amount),
       price: Number(data.price),
-      // Отправляем date только если это НЕ сегодня (совместимость со старым бэкендом)
+      // отправляем date только если это НЕ сегодня (совместимость с бэкендом)
       ...(data.date !== today && { date: data.date }),
     };
 
     mutate(payload, {
       onSuccess: () => {
+        // 🔥 мгновенная инвалидация кэша графика после успешной записи в БД
+        window.dispatchEvent(new CustomEvent("portfolio:transaction:success"));
         form.reset();
         onSuccess?.();
         onClose?.();

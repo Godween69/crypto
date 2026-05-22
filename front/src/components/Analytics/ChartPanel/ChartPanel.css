@@ -5,7 +5,7 @@
   background: #1e293b3a;
   border: 1px solid #334155;
   border-radius: 12px;
-  padding: 10px 60px 20px 30px; /* фиксированный отступ со всех сторон */
+
   /* display: inline-flex; панель занимает только ширину контента */
   flex-direction: column;
   gap: 16px;
@@ -16,15 +16,15 @@
 /* Заголовок панели */
 .chart-panel__header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
 
 .chart-panel__title {
-  margin: 0;
+  padding: 10px 20px;
+  margin-right: 0px;
   font-size: 15px;
   font-weight: 500;
   color: #f1f5f9;
+  margin-left: auto;
 }
 
 /* Тело панели (контейнер для графика) */
@@ -33,23 +33,5 @@
   /* убраны flex: 1 и min-height, чтобы блок не растягивался вертикально */
 }
 
-/* Контейнер для ECharts */
-.chart-container {
-  width: 520px; /* ширина под кольцо + боковую легенду */
-  height: 340px; /* фиксированная высота для стабильной инициализации ECharts */
-  max-width: 100%; /* адаптация под мобильные viewport */
-}
 
-/* Состояния загрузки, ошибки и пустого портфеля */
-.chart-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 520px;
-  height: 340px;
-  max-width: 100%;
-  color: #94a3b8;
-  font-size: 14px;
-  border: 1px dashed #334155;
-  border-radius: 8px;
-}
+

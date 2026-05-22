@@ -3,7 +3,7 @@
 export const CHART_CONFIG = {
   // 📊 Агрегация: топ-N + группировка остальных
   aggregation: {
-    maxVisibleItems: 6, // Варианты: любое число > 0 (сколько секторов показывать отдельно)
+    maxVisibleItems: 5, // Варианты: любое число > 0 (сколько секторов показывать отдельно)
     othersLabel: "Остальные", // Варианты: любая строка (подпись для сгруппированной доли)
   },
 
@@ -21,7 +21,7 @@ export const CHART_CONFIG = {
 
   // 📐 Геометрия кольца и смещение центра
   radius: { inner: "50%", outer: "90%" }, // Варианты: '0%'-'100%' или число в px
-  center: { x: "33%", y: "50%" }, // Варианты: '0%'-'100%' или число в px (смещение для места под легенду)
+  center: { x: "32%", y: "48%" }, // Варианты: '0%'-'100%' или число в px (смещение для места под легенду)
 
   // 📜 Легенда
   legend: {
@@ -39,7 +39,7 @@ export const CHART_CONFIG = {
 
   // 🖼️ Оформление секторов (тени, границы, скругления)
   itemStyle: {
-    borderRadius: 5, // Варианты: число (скругление краёв)
+    borderRadius: 4, // Варианты: число (скругление краёв)
     borderColor: "#0f172a", // Варианты: любой CSS-цвет
     borderWidth: 0, // Варианты: число (толщина разделителя)
     shadowBlur: 13, // Варианты: число (радиус тени)
@@ -67,7 +67,7 @@ export const CHART_CONFIG = {
     trigger: "item" as "item" | "axis", // Варианты: 'item' (по сектору) | 'axis' (по оси)
     backgroundColor: "rgba(15, 23, 42, 0.92)",
     borderColor: "#334155",
-    borderWidth: 1,
+    borderWidth: 0,
     textStyle: { color: "#f1f5f9", fontSize: 12, fontWeight: 500 },
     formatter: "{b}: ${c} ({d}%)",
     padding: [10, 14] as [number, number],

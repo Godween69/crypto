@@ -1,3 +1,5 @@
+// back\src\modules\market\market.module.ts
+
 import { Module } from '@nestjs/common';
 
 import { MarketService } from './market.service';

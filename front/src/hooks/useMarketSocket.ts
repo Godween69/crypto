@@ -1,4 +1,3 @@
-// front/src/hooks/useMarketSocket.ts
 import { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,7 +11,6 @@ export const useMarketSocket = () => {
   useEffect(() => {
     if (!socketRef.current) {
       socketRef.current = io(`${baseUrl}/market`, {
-        // создаём сокет единожды за жизненный цикл
         transports: ["websocket"],
         reconnection: true,
         reconnectionAttempts: 5,
@@ -20,29 +18,34 @@ export const useMarketSocket = () => {
     }
     const socket = socketRef.current;
 
-    socket.on("market:ttl_sync", (p) => setNextUpdateAt(p.nextUpdateAt)); // синхронизируем метку при коннекте
+    // синхронизируем метку TTL при подключении
+    socket.on("market:ttl_sync", (p) => setNextUpdateAt(p.nextUpdateAt));
+
+    // при пуше цен инвалидируем и рынок, и портфель для мгновенного пересчёта сводки
     socket.on("market:sync", (p) => {
-      if (p.nextUpdateAt) setNextUpdateAt(p.nextUpdateAt); // обновляем TTL-индикатор при пуше
-      queryClient.invalidateQueries({ queryKey: ["market"], exact: false }); // валидируем кэш через бэкенд
+      if (p.nextUpdateAt) setNextUpdateAt(p.nextUpdateAt);
+      queryClient.invalidateQueries({ queryKey: ["market"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["portfolio"], exact: false }); // гарантирует обновление виджета
     });
 
     if (!socket.connected) socket.connect(); // восстанавливаем канал после Strict Mode анмаунта
 
     return () => {
-      socket.off("market:ttl_sync"); // отписываемся от событий текущего рендера
-      socket.off("market:sync"); // предотвращаем накопление обработчиков
+      socket.off("market:ttl_sync");
+      socket.off("market:sync");
       socket.disconnect(); // разрываем соединение при реальном анмаунте
     };
   }, [queryClient, baseUrl]);
 
-  // Гарантированная инвалидация при истечении TTL
+  // гарантированная инвалидация при истечении TTL (фоллбэк при разрыве WS)
   useEffect(() => {
     const timeUntilExpiry = nextUpdateAt - Date.now();
     if (timeUntilExpiry <= 500) return; // цикл завершён, таймер не нужен
     const timer = setTimeout(() => {
-      queryClient.invalidateQueries({ queryKey: ["market"], exact: false }); // помечаем кэш устаревшим за 0.5с до конца
+      queryClient.invalidateQueries({ queryKey: ["market"], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["portfolio"], exact: false }); // синхронный фоллбэк
     }, timeUntilExpiry - 500);
-    return () => clearTimeout(timer); // сброс при обновлении метки или уходе со страницы
+    return () => clearTimeout(timer);
   }, [nextUpdateAt, queryClient]);
 
   return { nextUpdateAt };
