@@ -1,3 +1,4 @@
+// front/src/hooks/useMarketSocket.ts
 import { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -5,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 export const useMarketSocket = () => {
   const queryClient = useQueryClient();
   const [nextUpdateAt, setNextUpdateAt] = useState(() => Date.now() + 300_000);
-  const socketRef = useRef<Socket | null>(null); // сохраняем инстанс между циклами Strict Mode
+  const socketRef = useRef<Socket | null>(null);
   const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
   useEffect(() => {
@@ -18,33 +19,44 @@ export const useMarketSocket = () => {
     }
     const socket = socketRef.current;
 
-    // синхронизируем метку TTL при подключении
     socket.on("market:ttl_sync", (p) => setNextUpdateAt(p.nextUpdateAt));
 
-    // при пуше цен инвалидируем и рынок, и портфель для мгновенного пересчёта сводки
     socket.on("market:sync", (p) => {
       if (p.nextUpdateAt) setNextUpdateAt(p.nextUpdateAt);
-      queryClient.invalidateQueries({ queryKey: ["market"], exact: false });
-      queryClient.invalidateQueries({ queryKey: ["portfolio"], exact: false }); // гарантирует обновление виджета
+      // точечная инвалидация конкретных ключей вместо exact:false
+      // Это предотвращает перезапрос всех вложенных queryKey (детальных страниц)
+      queryClient.invalidateQueries({ queryKey: ["market"], exact: true });
+      queryClient.invalidateQueries({ queryKey: ["market-data"], exact: true });
+      queryClient.invalidateQueries({ queryKey: ["portfolio"], exact: true });
+      queryClient.invalidateQueries({
+        queryKey: ["portfolio-index"],
+        exact: true,
+      });
     });
 
-    if (!socket.connected) socket.connect(); // восстанавливаем канал после Strict Mode анмаунта
+    if (!socket.connected) socket.connect();
 
     return () => {
       socket.off("market:ttl_sync");
       socket.off("market:sync");
-      socket.disconnect(); // разрываем соединение при реальном анмаунте
+      socket.disconnect();
     };
   }, [queryClient, baseUrl]);
 
-  // гарантированная инвалидация при истечении TTL (фоллбэк при разрыве WS)
+  // фоллбэк-таймер ТОЛЬКО если сокет неактивен (защита от "преждевременных" запросов)
   useEffect(() => {
+    const socket = socketRef.current;
+    // Если сокет жив и подключён — доверяем ему, не ставим таймер
+    if (socket?.connected) return;
+
     const timeUntilExpiry = nextUpdateAt - Date.now();
-    if (timeUntilExpiry <= 500) return; // цикл завершён, таймер не нужен
+    if (timeUntilExpiry <= 1000) return; // слишком поздно, не ставим таймер
+
     const timer = setTimeout(() => {
-      queryClient.invalidateQueries({ queryKey: ["market"], exact: false });
-      queryClient.invalidateQueries({ queryKey: ["portfolio"], exact: false }); // синхронный фоллбэк
-    }, timeUntilExpiry - 500);
+      queryClient.invalidateQueries({ queryKey: ["market"], exact: true });
+      queryClient.invalidateQueries({ queryKey: ["portfolio"], exact: true });
+    }, timeUntilExpiry); // ждём ровно до nextUpdateAt
+
     return () => clearTimeout(timer);
   }, [nextUpdateAt, queryClient]);
 

@@ -1,11 +1,19 @@
 // back\src\modules\market\market.service.ts
 
-import {
-  Injectable,
-  HttpException,
-  OnModuleInit,
-  Logger,
-} from '@nestjs/common';
+/*
+1. Сервер стартует
+2. onModuleInit() → загрузка маппинга символов → первый запрос к API
+3. Клиент запрашивает /api/market?symbols=BTC,ETH
+4. getMarketData() → проверка Redis
+   ├── Есть в кэше → мгновенный ответ
+   └── Нет в кэше → refreshMarketCache() (с Promise-lock)
+5. Cron каждые 5 минут:
+   └── Если есть WS клиенты → обновить кэш и разослать
+6. Cron каждый час:
+   └── Всегда обновлять кэш для графика динамики портфеля (даже если нет клиентов) 
+   */
+
+import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import axios from 'axios';
@@ -18,118 +26,190 @@ import { MarketData, CoinGeckoMarket } from './types/market.types';
 @Injectable()
 export class MarketService implements OnModuleInit {
   private readonly logger = new Logger(MarketService.name);
-  private readonly CACHE_TTL = 300; // время жизни кэша в секундах
+  private readonly CACHE_TTL = 300; // 5 минут жизни кэша
+
+  // Promise-lock заменяет boolean-флаг. Гарантирует, что при парралельных запросах все вызовы будут ждать один и тот же fetch, а не создавать три параллельных.
+  private refreshPromise: Promise<MarketData[]> | null = null;
 
   constructor(
     private readonly config: ConfigService,
     private readonly resolver: CoinResolverService,
     private readonly redis: RedisService,
-    private readonly gateway: MarketGateway, // шлюз для глобального broadcast
-    private readonly prisma: PrismaService, // доступ к таблице транзакций
+    private readonly gateway: MarketGateway,
+    private readonly prisma: PrismaService,
   ) {}
 
   async onModuleInit() {
-    await this.resolver.init(); // прогреваем маппинг symbol → geckoId при старте
+    await this.resolver.init();
+    await this.refreshMarketCache([], 'onModuleInit');
   }
 
-  async getMarketData(symbols: string[]): Promise<MarketData[]> {
-    const apiKey = this.config.get<string>('COINGECKO_API_KEY');
-    const baseUrl = this.config.get<string>('COINGECKO_API_URL');
-    const resolved = await this.resolver.resolveMany(symbols); // резолвим символы в ID
-    const ids = resolved
-      .map((c) => c.id)
-      .sort()
-      .join(','); // формируем детерминированный ключ
-    const cacheKey = `market:${ids}`;
+  // 🔥 ОСНОВНОЙ МЕТОД: Получение данных с гарантией наличия кэша
+  // Используется фронтендом (MarketController) и внутренними сервисами (PortfolioSnapshotService)
+  // 🔥 ДВУХУРОВНЕВОЕ КЭШИРОВАНИЕ: сначала индивидуальные ключи, потом общий
+  async getMarketData(
+    symbols: string[],
+    caller = 'direct',
+  ): Promise<MarketData[]> {
+    this.logger.log(`📥 getMarketData [${caller}]: запрос для [${symbols}]`);
 
-    try {
-      const cached = await this.redis.get<MarketData[]>(cacheKey);
-      if (cached) return cached; // возвращаем из кэша при попадании
+    const resolved = await this.resolver.resolveMany(symbols);
+    const requestedUpper = resolved.map((c) => c.symbol.toUpperCase());
 
-      const { data } = await axios.get<CoinGeckoMarket>(
-        `${baseUrl}/coins/markets`,
-        {
-          params: { ids, vs_currency: 'usd', price_change_percentage: '24h' },
-          headers: { 'x-cg-demo-api-key': apiKey },
-          timeout: 5000, // ограничиваем время ожидания внешнего API
-        },
-      );
+    // === УРОВЕНЬ 1: Проверяем индивидуальные кэши для каждой монеты ===
+    const individualResults: MarketData[] = [];
+    const missingCoins: { symbol: string; geckoId: string }[] = [];
 
-      const result: MarketData[] = data.map((coin) => ({
-        coinId: coin.id,
-        symbol: coin.symbol.toUpperCase(),
-        currentPrice: coin.current_price ?? 0,
-        change24h: coin.price_change_percentage_24h ?? 0,
-        image: coin.image,
-        rank: coin.market_cap_rank ?? null,
-      }));
-
-      await this.redis.set(cacheKey, result, this.CACHE_TTL); // сохраняем нормализованные данные
-      const expiresAt = Date.now() + this.CACHE_TTL * 1000; // вычисляем абсолютную метку истечения
-      this.gateway.setNextUpdateAt(expiresAt); // синхронизируем метку в шлюзе
-      this.gateway.broadcastUpdate(result, expiresAt); // уведомляем все вкладки об обновлении
-      return result;
-    } catch (e) {
-      this.logger.error('Market fetch failed', e);
-      throw new HttpException('Market fetch failed', 500);
+    for (const coin of resolved) {
+      const singleKey = `market:single:${coin.id}`;
+      const cached = await this.redis.get<MarketData>(singleKey);
+      if (cached) {
+        individualResults.push(cached);
+      } else {
+        missingCoins.push({ symbol: coin.symbol, geckoId: coin.id });
+      }
     }
+
+    // Если все монеты найдены в индивидуальных кэшах — возвращаем без запроса к API
+    if (missingCoins.length === 0) {
+      this.logger.log(
+        `✅ getMarketData [${caller}]: cache HIT из индивидуальных кэшей (${individualResults.length} монет)`,
+      );
+      // Фильтруем только запрошенные символы (на случай если в кэше были лишние)
+      return individualResults.filter((d) => requestedUpper.includes(d.symbol));
+    }
+
+    // === УРОВЕНЬ 2: Если есть пропуски — обновляем кэш через API ===
+    this.logger.warn(
+      `⚠️ getMarketData [${caller}]: cache MISS для [${missingCoins.map((c) => c.geckoId).join(',')}], запуск refreshMarketCache`,
+    );
+
+    const allData = await this.refreshMarketCache(
+      symbols,
+      `getMarketData:${caller}`,
+    );
+
+    // Возвращаем только запрошенные символы
+    return allData.filter((d) => requestedUpper.includes(d.symbol));
   }
 
+  // 🔥 ФОНОВЫЙ КРОН: Обновляет кэш цен ВСЕГДА (раз в 60 минут)
+  // Это гарантирует, что график не будет прямой линией, даже если никто не заходит на сайт неделями.
+  @Cron('0 * * * *') // В каждый 0-ю минуту каждого часа
+  async handleBackgroundPriceUpdate() {
+    this.logger.debug('Фоновый cron: обновление рыночных данных раз в час...');
+    await this.refreshMarketCache([], 'cron:background:1h');
+  }
+
+  // 🔥 WS-КРОН: Обновляет кэш и шлет данные клиентам (каждые 5 минут)
   @Cron(CronExpression.EVERY_5_MINUTES)
-  async handleCronMarketUpdate() {
+  async handleWsPriceUpdate() {
     if (!this.gateway.hasActiveClients()) {
-      this.logger.debug('Cron skipped: нет активных WS-клиентов'); // жёсткий выход до любых запросов
+      // Если нет клиентов, пропускаем broadcast, фоновый крон всё равно обновит Redis
       return;
     }
 
-    this.logger.log('Cron started: обнаружены активные клиенты');
-    
-    // берём символы из БД
-    const records = await this.prisma.transaction.findMany({
-      select: { symbol: true },
-    });
-    // дедуплицируем монеты
-    // символ запрашивается только один раз, не важно, сколько транзакций с ним в базе
-    const uniqueSymbols = [...new Set(records.map((r) => r.symbol))];
-    if (uniqueSymbols.length === 0) {
-      this.logger.debug('Cron skipped: портфель пуст');
-      return;
+    this.logger.debug(
+      'WebSocket cron: обновление рыночных данных каждые 5мин (есть активные подключения)...',
+    );
+    const data = await this.refreshMarketCache([], 'cron:ws:5m');
+
+    // Если данные получены успешно, шлем их в сокет
+    if (data.length > 0) {
+      const expiresAt = Date.now() + this.CACHE_TTL * 1000;
+      this.gateway.broadcastUpdate(data, expiresAt);
     }
+  }
 
-    const resolved = await this.resolver.resolveMany(uniqueSymbols); // резолвим в geckoId
-    const ids = resolved
-      .map((c) => c.id)
-      .sort()
-      .join(','); // формируем стабильный ключ
-    const apiKey = this.config.get<string>('COINGECKO_API_KEY');
-    const baseUrl = this.config.get<string>('COINGECKO_API_URL');
-
-    try {
-      const { data } = await axios.get<CoinGeckoMarket>(
-        `${baseUrl}/coins/markets`,
-        {
-          params: { ids, vs_currency: 'usd', price_change_percentage: '24h' },
-          headers: { 'x-cg-demo-api-key': apiKey },
-          timeout: 5000, // защита от зависших запросов
-        },
+  // Универсальный метод обновления кэша
+  // 🔥 extraSymbols — символы из запроса клиента сверх тех, что в БД
+  private async refreshMarketCache(
+    extraSymbols: string[] = [],
+    caller = 'unknown',
+  ): Promise<MarketData[]> {
+    // Если обновление уже запущено, возвращаем существующий Promise
+    if (this.refreshPromise) {
+      this.logger.debug(
+        `[${caller}] Обновление уже выполняется, ожидаем завершение...`,
       );
-
-      const allData: MarketData[] = data.map((coin) => ({
-        coinId: coin.id,
-        symbol: coin.symbol.toUpperCase(),
-        currentPrice: coin.current_price ?? 0,
-        change24h: coin.price_change_percentage_24h ?? 0,
-        image: coin.image,
-        rank: coin.market_cap_rank ?? null,
-      }));
-
-      await this.redis.set(`market:${ids}`, allData, this.CACHE_TTL); // обновляем глобальный кэш
-      const nextAt = Date.now() + this.CACHE_TTL * 1000; // вычисляем метку следующего цикла
-      this.gateway.setNextUpdateAt(nextAt); // сохраняем метку в шлюзе
-      this.gateway.broadcastUpdate(allData, nextAt); // пушим данные и метку всем вкладкам
-      this.logger.log('Cron finished: Redis обновлён, broadcast выполнен');
-    } catch (e) {
-      this.logger.error('Cron market update failed', e);
+      return this.refreshPromise;
     }
+
+    // Создаём Promise и сразу сохраняем его в переменную (sync-присваивание предотвращает race condition)
+    this.refreshPromise = (async () => {
+      try {
+        const records = await this.prisma.transaction.findMany({
+          select: { symbol: true },
+        });
+        const dbSymbols = [...new Set(records.map((r) => r.symbol))];
+        // объединяем символы из БД с запрошенными через extraSymbols
+        const uniqueSymbols = [
+          ...new Set([...dbSymbols, ...extraSymbols]),
+        ].filter(Boolean);
+        if (uniqueSymbols.length === 0) {
+          this.logger.log(`[${caller}] Портфель пуст, пропускаем обновление`);
+          return [];
+        }
+
+        const resolved = await this.resolver.resolveMany(uniqueSymbols);
+        const ids = resolved
+          .map((c) => c.id)
+          .sort()
+          .join(',');
+        const apiKey = this.config.get<string>('COINGECKO_API_KEY');
+        const baseUrl = this.config.get<string>('COINGECKO_API_URL');
+
+        this.logger.log(
+          `🚀 [${caller}] Начало обновления API для ${uniqueSymbols}...`,
+        );
+        const { data } = await axios.get<CoinGeckoMarket>(
+          `${baseUrl}/coins/markets`,
+          {
+            params: { ids, vs_currency: 'usd', price_change_percentage: '24h' },
+            headers: { 'x-cg-demo-api-key': apiKey },
+            timeout: 5000,
+          },
+        );
+
+        const result: MarketData[] = data.map((coin) => ({
+          coinId: coin.id,
+          symbol: coin.symbol.toUpperCase(),
+          currentPrice: coin.current_price ?? 0,
+          change24h: coin.price_change_percentage_24h ?? 0,
+          image: coin.image,
+          rank: coin.market_cap_rank ?? null,
+        }));
+
+        // 🔥 ДВУХУРОВНЕВОЕ СОХРАНЕНИЕ:
+        // 1. Каждая монета отдельно под ключом market:single:{geckoId}
+        //    → решает проблему cache MISS при запросе одиночных монет
+        // 2. Общий ключ market:{sorted_ids} для совместимости
+        const singleCacheOps: Promise<void>[] = [];
+        for (const item of result) {
+          singleCacheOps.push(
+            this.redis.set(
+              `market:single:${item.coinId}`,
+              item,
+              this.CACHE_TTL,
+            ),
+          );
+        }
+        await Promise.all(singleCacheOps);
+        await this.redis.set(`market:${ids}`, result, this.CACHE_TTL);
+
+        this.logger.log(
+          `✅ [${caller}] Рыночные данные успешно обновлены и сохранены в Redis (${result.length} монет: ${result.length} индивидуальных + 1 общий кэш).`,
+        );
+        return result;
+      } catch (e) {
+        this.logger.error(`[${caller}] Ошибка обновления рыночных данных`, e);
+        return [];
+      } finally {
+        // Сбрасываем лок после завершения (успех или ошибка)
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
   }
 }

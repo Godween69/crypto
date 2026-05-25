@@ -1,4 +1,5 @@
 // front/src/components/TransactionForm/TransactionForm.tsx
+
 import { useTransactionForm, type TransactionFormValues } from './useTransactionForm';
 import { SymbolField } from './SymbolField';
 import { AmountField } from './AmountField';
@@ -51,11 +52,13 @@ export const TransactionForm = ({ symbol, initialData, onSuccess, onClose }: Pro
         error={errors.amount}
       />
 
+      {/* 🔥 Передаём tickerStatus для отображения красного сообщения */}
       <PriceField
         disabled={state.isPending}
         useMarketPrice={state.useMarketPriceEnabled}
         marketPrice={state.marketPrice}
         marketName={state.marketName}
+        tickerStatus={state.tickerStatus}
         registerReturn={register('price')}
         onMarketPriceToggle={handlers.handleMarketPriceToggle}
         onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handlers.focusNext('date'))}
@@ -84,8 +87,12 @@ export const TransactionForm = ({ symbol, initialData, onSuccess, onClose }: Pro
 
       {state.error && <div className="mutation-error">{state.error.message}</div>}
 
-      <button type="submit" disabled={state.isPending || !!errors.amount}>
-        {state.isPending ? 'Сохранение...' : 'Сохранить'}
+      <button
+        type="submit"
+        disabled={state.isSubmitDisabled || !!errors.amount}
+        title={!state.isSymbolVerified && state.type === 'BUY' ? 'Сначала подтвердите тикер на рынке' : undefined}
+      >
+        {state.isPending ? 'Сохранение...' : state.isVerifyingSymbol ? 'Проверка тикера...' : 'Сохранить'}
       </button>
     </form>
   );

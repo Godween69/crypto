@@ -14,10 +14,17 @@ crypto
 │  │  │  │  └─ migration.sql
 │  │  │  ├─ 20260512131027_dobavil_spisok_monet
 │  │  │  │  └─ migration.sql
+│  │  │  ├─ 20260522130115_add_portfolio_snapshot_with_granularity
+│  │  │  │  └─ migration.sql
 │  │  │  └─ migration_lock.toml
 │  │  └─ schema.prisma
 │  ├─ README.md
 │  ├─ src
+│  │  ├─ analytics
+│  │  │  ├─ index.controller.ts
+│  │  │  ├─ index.module.ts
+│  │  │  ├─ info.md
+│  │  │  └─ portfolio-snapshot.service.ts
 │  │  ├─ app.module.ts
 │  │  ├─ common
 │  │  │  └─ prisma
@@ -35,6 +42,7 @@ crypto
 │  │  │  │  ├─ coin.repository.ts
 │  │  │  │  ├─ info.md
 │  │  │  │  ├─ market.controller.ts
+│  │  │  │  ├─ market.gateway.ts
 │  │  │  │  ├─ market.module.ts
 │  │  │  │  ├─ market.service.ts
 │  │  │  │  └─ types
@@ -86,10 +94,23 @@ crypto
    │  ├─ App.css
    │  ├─ App.tsx
    │  ├─ components
+   │  │  ├─ Analytics
+   │  │  │  ├─ ChartPanel
+   │  │  │  │  ├─ ChartPanel.css
+   │  │  │  │  └─ ChartPanel.tsx
+   │  │  │  ├─ PortfolioDistributionChart
+   │  │  │  │  ├─ chart.config.ts
+   │  │  │  │  ├─ PortfolioDistributionChart.css
+   │  │  │  │  └─ PortfolioDistributionChart.tsx
+   │  │  │  └─ PortfolioIndexChart
+   │  │  │     ├─ index-chart.config.ts
+   │  │  │     ├─ info.md
+   │  │  │     ├─ PortfolioIndexChart.css
+   │  │  │     └─ PortfolioIndexChart.tsx
    │  │  ├─ MarketRefreshIndicator
-   │  │  │  ├─ info.md
-   │  │  │  ├─ MarketRefreshIndicator.css
-   │  │  │  └─ MarketRefreshIndicator.tsx
+   │  │  │  ├─ CircularTtlIndicator.css
+   │  │  │  ├─ CircularTtlIndicator.tsx
+   │  │  │  └─ info.md
    │  │  ├─ Modal
    │  │  │  ├─ Modal.css
    │  │  │  ├─ ModalContext.ts
@@ -117,12 +138,14 @@ crypto
    │  │     ├─ SymbolField.tsx
    │  │     ├─ TransactionForm.css
    │  │     ├─ TransactionForm.tsx
+   │  │     ├─ useSymbolValidation.ts
    │  │     └─ useTransactionForm.ts
    │  ├─ hooks
    │  │  ├─ useCreateTransaction.ts
    │  │  ├─ useDeletePortfolioItem.ts
    │  │  ├─ useDeleteTransaction.ts
    │  │  ├─ useMarketData.ts
+   │  │  ├─ useMarketSocket.ts
    │  │  ├─ useModal.ts
    │  │  ├─ usePortfolio.ts
    │  │  ├─ useTransactions.ts
@@ -133,9 +156,9 @@ crypto
    │  │  └─ RootLayout.tsx
    │  ├─ main.tsx
    │  ├─ pages
-   │  │  ├─ AnaliticPage
-   │  │  │  ├─ AnaliticPage.css
-   │  │  │  └─ AnaliticPage.tsx
+   │  │  ├─ AnalyticsPage
+   │  │  │  ├─ AnalyticsPage.css
+   │  │  │  └─ AnalyticsPage.tsx
    │  │  ├─ ErrorPage
    │  │  │  ├─ ErrorPage.css
    │  │  │  └─ ErrorPage.tsx

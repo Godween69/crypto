@@ -1,3 +1,5 @@
+// back\src\modules\market\market.controller.ts
+
 import { Controller, Get, Query } from '@nestjs/common';
 import { MarketService } from './market.service';
 import { MarketData } from './types/market.types';

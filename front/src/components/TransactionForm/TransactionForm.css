@@ -226,3 +226,18 @@
   font-weight: 500;
 }
 
+
+
+.market-hint-verifying {
+  color: #3b82f6;
+}
+
+.market-hint-error {
+  color: #ef4444;
+  font-weight: 500;
+}
+
+.market-hint-info {
+  color: #f59e0b;
+}
+

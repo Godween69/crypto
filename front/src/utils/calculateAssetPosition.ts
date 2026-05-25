@@ -7,6 +7,10 @@ const round = (n: number) => Math.round(n * 100) / 100;
 /**
  * Рассчитывает позицию с учётом реализованной и нереализованной прибыли.
  * Метод: Average Cost Basis + накопление Realized P&L
+ *
+ * 🔥 FIX: Убрана защита Math.min(t.amount, amount), которая создавала расхождение
+ * с простым суммированием в списке портфеля. Теперь баланс может уходить в минус
+ * (short-selling), что позволяет детектировать ошибочные транзакции.
  */
 export const calculateAssetPosition = (
   symbol: string,
@@ -31,15 +35,37 @@ export const calculateAssetPosition = (
       costBasis += t.amount * t.price;
       totalInvested += t.amount * t.price;
     } else {
-      if (amount <= 0) continue; // защита от продажи в минус
-      const sellAmount = Math.min(t.amount, amount);
-      const avgPrice = costBasis / amount;
-      realizedPnl += (t.price - avgPrice) * sellAmount; // фиксируем прибыль/убыток
-      amount -= sellAmount;
-      costBasis -= sellAmount * avgPrice; // пропорционально уменьшаем себестоимость
+      // 🔥 FIX: Убрана защита от продажи в минус. Теперь amount может стать отрицательным,
+      // что точно повторяет логику простого суммирования в списке портфеля.
+      // Если amount <= 0 перед продажей, это означает short-selling с нулевой позиции.
+      const sellAmount = t.amount;
+
+      if (amount > 0) {
+        // Нормальная продажа: фиксируем P&L по средней цене
+        const avgPrice = costBasis / amount;
+        const actualSellAmount = Math.min(sellAmount, amount);
+        realizedPnl += (t.price - avgPrice) * actualSellAmount;
+
+        // Если продаём больше, чем есть (short-selling)
+        if (sellAmount > amount) {
+          const shortAmount = sellAmount - amount;
+          // Short-selling: себестоимость обнуляется, баланс уходит в минус
+          amount = -shortAmount;
+          costBasis = 0;
+        } else {
+          amount -= sellAmount;
+          costBasis -= sellAmount * avgPrice;
+        }
+      } else {
+        // Продажа при нулевом или отрицательном балансе (deep short-selling)
+        amount -= sellAmount;
+        // costBasis остаётся 0, так как позиции нет
+      }
     }
   }
 
+  // 🔥 FIX: safeAmount теперь корректно отражает реальный баланс (может быть 0 или отрицательным)
+  // Для отображения в UI используем Math.max(0, amount), чтобы не показывать отрицательные значения
   const safeAmount = Math.max(0, amount);
   const safePrice = Math.max(0, currentPrice ?? 0);
   const totalValue = safeAmount * safePrice;

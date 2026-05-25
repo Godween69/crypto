@@ -1,4 +1,5 @@
 // front/src/components/TransactionForm/useTransactionForm.ts
+
 import { useEffect, useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -7,8 +8,9 @@ import * as z from "zod";
 import { useCreateTransaction } from "../../hooks/useCreateTransaction";
 import { usePortfolio } from "../../hooks/usePortfolio";
 import { useMarketData } from "../../hooks/useMarketData";
+import { useSymbolValidation } from "./useSymbolValidation";
 
-const getTodayDate = () => new Date().toISOString().split("T")[0];
+const computeTodayDate = () => new Date().toISOString().split("T")[0];
 
 const transactionSchema = z.object({
   symbol: z
@@ -54,15 +56,20 @@ export const useTransactionForm = ({
   const [fetchSymbol, setFetchSymbol] = useState(symbol ?? "");
   const [useTodayDate, setUseTodayDate] = useState(true);
 
-  const form = useForm<TransactionFormValues>({
-    resolver: zodResolver(transactionSchema),
-    defaultValues: {
+  const defaultValues = useMemo(
+    () => ({
       symbol: symbol ?? initialData?.symbol ?? "",
-      type: initialData?.type ?? "BUY",
+      type: (initialData?.type ?? "BUY") as "BUY" | "SELL",
       amount: initialData?.amount,
       price: initialData?.price,
-      date: initialData?.date ?? getTodayDate(),
-    },
+      date: initialData?.date ?? computeTodayDate(),
+    }),
+    [],
+  );
+
+  const form = useForm<TransactionFormValues>({
+    resolver: zodResolver(transactionSchema),
+    defaultValues,
   });
 
   const { setValue, setError, clearErrors, setFocus, handleSubmit } = form;
@@ -71,32 +78,37 @@ export const useTransactionForm = ({
   const selectedSymbol = useWatch({ control: form.control, name: "symbol" });
   const amount = useWatch({ control: form.control, name: "amount" });
 
-  const currentPosition = portfolio.find((i) => i.symbol === selectedSymbol);
-  const maxSellAmount = currentPosition?.amount ?? 0;
   const sellableAssets = useMemo(
     () => portfolio.filter((i) => i.amount > 0),
     [portfolio],
   );
+  const isInPortfolio = sellableAssets.some((a) => a.symbol === selectedSymbol);
+  const maxSellAmount =
+    portfolio.find((i) => i.symbol === selectedSymbol)?.amount ?? 0;
 
   const { data: marketData = [] } = useMarketData(
     fetchSymbol ? [fetchSymbol] : [],
   );
-  const marketPrice = marketData[0]?.currentPrice ?? 0;
 
-  // фоллбэк: если name не пришёл — генерируем из coinId
-  const marketName = useMemo(() => {
-    const item = marketData[0];
-    if (!item) return "";
-    if (item.name) return item.name;
-    if (item.coinId) {
-      return item.coinId
-        .split("-")
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(" ");
-    }
-    return "";
-  }, [marketData]);
+  const {
+    marketPrice,
+    marketName,
+    tickerStatus,
+    symbolFieldError,
+    isSymbolVerified,
+    isVerifyingSymbol,
+    triggerMarketFetch,
+    validateBeforeSubmit,
+  } = useSymbolValidation({
+    selectedSymbol,
+    fetchSymbol,
+    marketData,
+    type,
+    isInPortfolio,
+    setFetchSymbol,
+  });
 
+  // Синхронизация с RHF (внешняя система)
   useEffect(() => {
     if (type === "SELL" && sellAll) setValue("amount", maxSellAmount);
   }, [type, sellAll, maxSellAmount, setValue]);
@@ -107,7 +119,7 @@ export const useTransactionForm = ({
   }, [marketPrice, useMarketPriceEnabled, setValue]);
 
   useEffect(() => {
-    if (useTodayDate) setValue("date", getTodayDate());
+    if (useTodayDate) setValue("date", computeTodayDate());
   }, [useTodayDate, setValue]);
 
   useEffect(() => {
@@ -121,39 +133,43 @@ export const useTransactionForm = ({
     }
   }, [type, amount, maxSellAmount, setError, clearErrors]);
 
-  const triggerMarketFetch = (value: string) =>
-    setFetchSymbol(value.toUpperCase());
-  const handleSellAllChange = (checked: boolean) => setSellAll(checked);
-  const handleMarketPriceToggle = (checked: boolean) =>
-    setUseMarketPriceEnabled(checked);
-  const handleUseTodayDateToggle = (checked: boolean) =>
-    setUseTodayDate(checked);
+  useEffect(() => {
+    if (symbolFieldError)
+      setError("symbol", { type: "manual", message: symbolFieldError });
+    else clearErrors("symbol");
+  }, [symbolFieldError, setError, clearErrors]);
 
   const onSubmit = handleSubmit((data) => {
     if (data.type === "SELL" && data.amount > maxSellAmount) {
       setError("amount", { type: "manual", message: "Недостаточно актива" });
       return;
     }
+    const validationError = validateBeforeSubmit(data.symbol);
+    if (validationError) {
+      setError("symbol", { type: "manual", message: validationError });
+      return;
+    }
 
-    const today = getTodayDate();
-    const payload = {
-      symbol: data.symbol,
-      type: data.type,
-      amount: Number(data.amount),
-      price: Number(data.price),
-      // отправляем date только если это НЕ сегодня (совместимость с бэкендом)
-      ...(data.date !== today && { date: data.date }),
-    };
-
-    mutate(payload, {
-      onSuccess: () => {
-        // 🔥 мгновенная инвалидация кэша графика после успешной записи в БД
-        window.dispatchEvent(new CustomEvent("portfolio:transaction:success"));
-        form.reset();
-        onSuccess?.();
-        onClose?.();
+    const today = computeTodayDate();
+    mutate(
+      {
+        symbol: data.symbol,
+        type: data.type,
+        amount: Number(data.amount),
+        price: Number(data.price),
+        ...(data.date !== today && { date: data.date }),
       },
-    });
+      {
+        onSuccess: () => {
+          window.dispatchEvent(
+            new CustomEvent("portfolio:transaction:success"),
+          );
+          form.reset();
+          onSuccess?.();
+          onClose?.();
+        },
+      },
+    );
   });
 
   return {
@@ -166,18 +182,26 @@ export const useTransactionForm = ({
       useMarketPriceEnabled,
       marketPrice,
       marketName,
+      tickerStatus,
       maxSellAmount,
       sellableAssets,
       isPending,
       error,
       useTodayDate,
+      isSymbolVerified,
+      isVerifyingSymbol,
+      isSubmitDisabled:
+        isPending ||
+        !isSymbolVerified ||
+        isVerifyingSymbol ||
+        !!symbolFieldError,
     },
     handlers: {
       onSubmit,
       triggerMarketFetch,
-      handleSellAllChange,
-      handleMarketPriceToggle,
-      handleUseTodayDateToggle,
+      handleSellAllChange: (c: boolean) => setSellAll(c),
+      handleMarketPriceToggle: (c: boolean) => setUseMarketPriceEnabled(c),
+      handleUseTodayDateToggle: (c: boolean) => setUseTodayDate(c),
       focusNext: (field: keyof TransactionFormValues) => setFocus(field),
     },
   };

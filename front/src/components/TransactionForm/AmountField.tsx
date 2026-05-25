@@ -1,3 +1,5 @@
+// front\src\components\TransactionForm\AmountField.tsx
+
 import React from 'react';
 import type { UseFormRegisterReturn, FieldError } from 'react-hook-form'; 
 
