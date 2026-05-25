@@ -28,7 +28,6 @@ export class MarketService implements OnModuleInit {
   private readonly logger = new Logger(MarketService.name);
   private readonly CACHE_TTL = 300; // 5 минут жизни кэша
 
-  // Promise-lock заменяет boolean-флаг. Гарантирует, что при парралельных запросах все вызовы будут ждать один и тот же fetch, а не создавать три параллельных.
   private refreshPromise: Promise<MarketData[]> | null = null;
 
   constructor(
@@ -44,90 +43,94 @@ export class MarketService implements OnModuleInit {
     await this.refreshMarketCache([], 'onModuleInit');
   }
 
-  // 🔥 ОСНОВНОЙ МЕТОД: Получение данных с гарантией наличия кэша
-  // Используется фронтендом (MarketController) и внутренними сервисами (PortfolioSnapshotService)
-  // 🔥 ДВУХУРОВНЕВОЕ КЭШИРОВАНИЕ: сначала индивидуальные ключи, потом общий
   async getMarketData(
     symbols: string[],
     caller = 'direct',
   ): Promise<MarketData[]> {
-    this.logger.log(`📥 getMarketData [${caller}]: запрос для [${symbols}]`);
+    if (symbols.length === 0) return [];
+
+    this.logger.log(
+      `📥 getMarketData [${caller}]: запрос для [${symbols.join(', ')}]`,
+    );
 
     const resolved = await this.resolver.resolveMany(symbols);
-    const requestedUpper = resolved.map((c) => c.symbol.toUpperCase());
+    const result: MarketData[] = [];
+    const missing: { symbol: string; geckoId: string }[] = [];
 
-    // === УРОВЕНЬ 1: Проверяем индивидуальные кэши для каждой монеты ===
-    const individualResults: MarketData[] = [];
-    const missingCoins: { symbol: string; geckoId: string }[] = [];
-
+    // Шаг 1: проверяем single-кэш для каждой монеты
     for (const coin of resolved) {
-      const singleKey = `market:single:${coin.id}`;
+      const singleKey = `market:coin:${coin.symbol}`;
       const cached = await this.redis.get<MarketData>(singleKey);
       if (cached) {
-        individualResults.push(cached);
+        result.push(cached);
       } else {
-        missingCoins.push({ symbol: coin.symbol, geckoId: coin.id });
+        missing.push({ symbol: coin.symbol, geckoId: coin.id });
       }
     }
 
-    // Если все монеты найдены в индивидуальных кэшах — возвращаем без запроса к API
-    if (missingCoins.length === 0) {
+    if (missing.length === 0) {
       this.logger.log(
-        `✅ getMarketData [${caller}]: cache HIT из индивидуальных кэшей (${individualResults.length} монет)`,
+        `✅ getMarketData [${caller}]: cache FULL HIT (${result.length} монет)`,
       );
-      // Фильтруем только запрошенные символы (на случай если в кэше были лишние)
-      return individualResults.filter((d) => requestedUpper.includes(d.symbol));
+      return result;
     }
 
-    // === УРОВЕНЬ 2: Если есть пропуски — обновляем кэш через API ===
     this.logger.warn(
-      `⚠️ getMarketData [${caller}]: cache MISS для [${missingCoins.map((c) => c.geckoId).join(',')}], запуск refreshMarketCache`,
+      `⚠️ getMarketData [${caller}]: cache partial MISS, догружаем [${missing.map((m) => m.symbol).join(', ')}]`,
     );
 
-    const allData = await this.refreshMarketCache(
-      symbols,
+    // 🔥 FIX: Если refreshMarketCache вернет пустой массив из-за ошибки API,
+    // мы не должны добавлять пустоту в результат. Мы вернем только то, что было в кэше.
+    const fetched = await this.refreshMarketCache(
+      missing.map((m) => m.symbol),
       `getMarketData:${caller}`,
     );
 
-    // Возвращаем только запрошенные символы
-    return allData.filter((d) => requestedUpper.includes(d.symbol));
+    for (const item of fetched) {
+      await this.redis.set(`market:coin:${item.symbol}`, item, this.CACHE_TTL);
+      if (missing.some((m) => m.symbol === item.symbol)) {
+        result.push(item);
+      }
+    }
+
+    return result;
   }
 
-  // 🔥 ФОНОВЫЙ КРОН: Обновляет кэш цен ВСЕГДА (раз в 60 минут)
-  // Это гарантирует, что график не будет прямой линией, даже если никто не заходит на сайт неделями.
-  @Cron('0 * * * *') // В каждый 0-ю минуту каждого часа
+  @Cron('0 * * * *')
   async handleBackgroundPriceUpdate() {
     this.logger.debug('Фоновый cron: обновление рыночных данных раз в час...');
     await this.refreshMarketCache([], 'cron:background:1h');
   }
 
-  // 🔥 WS-КРОН: Обновляет кэш и шлет данные клиентам (каждые 5 минут)
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleWsPriceUpdate() {
-    if (!this.gateway.hasActiveClients()) {
-      // Если нет клиентов, пропускаем broadcast, фоновый крон всё равно обновит Redis
-      return;
-    }
+    if (!this.gateway.hasActiveClients()) return;
 
     this.logger.debug(
-      'WebSocket cron: обновление рыночных данных каждые 5мин (есть активные подключения)...',
+      'WebSocket cron: обновление рыночных данных каждые 5мин...',
     );
     const data = await this.refreshMarketCache([], 'cron:ws:5m');
-
-    // Если данные получены успешно, шлем их в сокет
     if (data.length > 0) {
+      for (const item of data) {
+        await this.redis.set(
+          `market:coin:${item.symbol}`,
+          item,
+          this.CACHE_TTL,
+        );
+      }
       const expiresAt = Date.now() + this.CACHE_TTL * 1000;
       this.gateway.broadcastUpdate(data, expiresAt);
+    } else {
+      this.logger.warn(
+        '❌ [cron:ws:5m] Данные не получены (ошибка API или пустой ответ). Broadcast пропущен.',
+      );
     }
   }
 
-  // Универсальный метод обновления кэша
-  // 🔥 extraSymbols — символы из запроса клиента сверх тех, что в БД
   private async refreshMarketCache(
     extraSymbols: string[] = [],
     caller = 'unknown',
   ): Promise<MarketData[]> {
-    // Если обновление уже запущено, возвращаем существующий Promise
     if (this.refreshPromise) {
       this.logger.debug(
         `[${caller}] Обновление уже выполняется, ожидаем завершение...`,
@@ -135,17 +138,16 @@ export class MarketService implements OnModuleInit {
       return this.refreshPromise;
     }
 
-    // Создаём Promise и сразу сохраняем его в переменную (sync-присваивание предотвращает race condition)
     this.refreshPromise = (async () => {
       try {
         const records = await this.prisma.transaction.findMany({
           select: { symbol: true },
         });
         const dbSymbols = [...new Set(records.map((r) => r.symbol))];
-        // объединяем символы из БД с запрошенными через extraSymbols
         const uniqueSymbols = [
           ...new Set([...dbSymbols, ...extraSymbols]),
         ].filter(Boolean);
+
         if (uniqueSymbols.length === 0) {
           this.logger.log(`[${caller}] Портфель пуст, пропускаем обновление`);
           return [];
@@ -160,8 +162,9 @@ export class MarketService implements OnModuleInit {
         const baseUrl = this.config.get<string>('COINGECKO_API_URL');
 
         this.logger.log(
-          `🚀 [${caller}] Начало обновления API для ${uniqueSymbols}...`,
+          `🚀 [${caller}] Начало обновления API для ${uniqueSymbols.join(', ')}...`,
         );
+
         const { data } = await axios.get<CoinGeckoMarket>(
           `${baseUrl}/coins/markets`,
           {
@@ -180,32 +183,29 @@ export class MarketService implements OnModuleInit {
           rank: coin.market_cap_rank ?? null,
         }));
 
-        // 🔥 ДВУХУРОВНЕВОЕ СОХРАНЕНИЕ:
-        // 1. Каждая монета отдельно под ключом market:single:{geckoId}
-        //    → решает проблему cache MISS при запросе одиночных монет
-        // 2. Общий ключ market:{sorted_ids} для совместимости
-        const singleCacheOps: Promise<void>[] = [];
+        // 🔥 FIX: Сохраняем в Redis только если получили данные
         for (const item of result) {
-          singleCacheOps.push(
-            this.redis.set(
-              `market:single:${item.coinId}`,
-              item,
-              this.CACHE_TTL,
-            ),
+          await this.redis.set(
+            `market:coin:${item.symbol}`,
+            item,
+            this.CACHE_TTL,
           );
         }
-        await Promise.all(singleCacheOps);
-        await this.redis.set(`market:${ids}`, result, this.CACHE_TTL);
 
         this.logger.log(
-          `✅ [${caller}] Рыночные данные успешно обновлены и сохранены в Redis (${result.length} монет: ${result.length} индивидуальных + 1 общий кэш).`,
+          `✅ [${caller}] Рыночные данные обновлены (${result.length} монет).`,
         );
         return result;
-      } catch (e) {
-        this.logger.error(`[${caller}] Ошибка обновления рыночных данных`, e);
+      } catch (err) {
+        if (err instanceof Error) {
+          this.logger.error(
+            `[${caller}] Ошибка обновления рыночных данных: ${err.message}`,
+          );
+        }
+        // 🔥 ВАЖНО: Возвращаем пустой массив, но НЕ очищаем старый кэш в Redis.
+        // Старые данные останутся жить до истечения TTL, что лучше, чем ничего.
         return [];
       } finally {
-        // Сбрасываем лок после завершения (успех или ошибка)
         this.refreshPromise = null;
       }
     })();

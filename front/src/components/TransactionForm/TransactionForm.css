@@ -214,30 +214,35 @@
   }
 }
 
-.market-hint {
+/* ==========================================================================
+   Helper text
+   ========================================================================== */
+
+.form-field small {
   display: block;
   margin-top: 4px;
-  font-size: 0.75rem;
+  font-size: 12px;
+  color: #9ca3af; /* Базовый серый цвет */
+}
+
+.form-field .market-hint {
   color: #7c7c7c;
 }
 
-.market-name {
-  color: #4caf50; /* ✅ Зелёный цвет для названия */
+.form-field .market-hint-verifying {
+  color: #3b82f6 ;
+}
+
+.form-field .market-hint-error {
+  color: #ef4444 ;
   font-weight: 500;
 }
 
-
-
-.market-hint-verifying {
-  color: #3b82f6;
-}
-
-.market-hint-error {
-  color: #ef4444;
-  font-weight: 500;
-}
-
-.market-hint-info {
+.form-field .market-hint-info {
   color: #f59e0b;
 }
 
+.market-name {
+  color: #4caf50;
+  font-weight: 500;
+}

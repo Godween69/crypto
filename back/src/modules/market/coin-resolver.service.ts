@@ -30,6 +30,9 @@ type ResolvedCoin = {
 export class CoinResolverService implements OnModuleInit {
   private map = new Map<string, string>();
 
+  // TTL для кэширования "монеты нет" (чтобы не спамить API при опечатках)
+  private readonly NOT_FOUND_TTL = 300; // 5 минут
+
   constructor(
     private repo: CoinRepository,
     private config: ConfigService, //Чтение .env
@@ -48,76 +51,84 @@ export class CoinResolverService implements OnModuleInit {
     await this.init();
   }
 
-// ────── Резолвер symbol -> gecko id ────────────────────────────────────
+  // ────── Резолвер symbol -> gecko id ────────────────────────────────────
 
-async resolve(symbol: string): Promise<string> {
-  const key = symbol.toUpperCase();
+  async resolve(symbol: string): Promise<string> {
+    const key = symbol.toUpperCase();
 
-  // 1. Память (0мс)
-  // самый быстрый слой (in-process cache)
-  const cached = this.map.get(key);
-  if (cached) return cached;
+    // 1. Память (0мс)
+    // самый быстрый слой (in-process cache)
+    const cached = this.map.get(key);
+    if (cached) return cached;
 
-  // 2. Redis cache (1–2мс, shared между инстансами)
-  const redisKey = `coin:${key}`;
+    // 2. Redis cache (1–2мс, shared между инстансами)
+    const redisKey = `coin:${key}`;
 
-  try {
-    const redisCached = await this.redis.get<string>(redisKey);
-    if (redisCached) {
-      this.map.set(key, redisCached); // прогреваем memory cache
-      return redisCached;
+    try {
+      const redisCached = await this.redis.get<string>(redisKey);
+      if (redisCached) {
+        // 🔥 FIX: Проверка на маркер "не найдено", чтобы не искать снова
+        if (redisCached === '__NOT_FOUND__') {
+          throw new Error(`Монета не найдена (cached): ${symbol}`);
+        }
+        this.map.set(key, redisCached); // прогреваем memory cache
+        return redisCached;
+      }
+    } catch {
+      // Redis не должен ломать основной flow
+      // fallback просто продолжается дальше
     }
-  } catch {
-    // Redis не должен ломать основной flow
-    // fallback просто продолжается дальше
-  }
 
-  // 3. База данных (1–5мс)
-  const dbCoin = await this.repo.findBySymbol(key);
+    // 3. База данных (1–5мс)
+    const dbCoin = await this.repo.findBySymbol(key);
 
-  if (dbCoin) {
-    this.map.set(key, dbCoin.geckoId);
+    if (dbCoin) {
+      this.map.set(key, dbCoin.geckoId);
 
-    // сохраняем в Redis (TTL: 24h)
-    await this.redis.set(redisKey, dbCoin.geckoId, 60 * 60 * 24);
+      // сохраняем в Redis (TTL: 24h)
+      await this.redis.set(redisKey, dbCoin.geckoId, 60 * 60 * 24);
 
-    return dbCoin.geckoId;
-  }
+      return dbCoin.geckoId;
+    }
 
-  //  4. Внешний API (800мс) 
-  const geckoId = await this.searchCoin(symbol);
+    //  4. Внешний API (800мс)
+    const geckoId = await this.searchCoin(symbol);
 
-  // Если нет - бросаем ошибку
-  if (!geckoId) throw new Error(`Монета не найдена: ${symbol}`);
+    // Если нет - бросаем ошибку
+    if (!geckoId) {
+      // 🔥 FIX: Кэшируем отсутствие монеты, чтобы не долбить API при повторных вводах мусора
+      await this.redis.set(redisKey, '__NOT_FOUND__', this.NOT_FOUND_TTL);
+      throw new Error(`Монета не найдена: ${symbol}`);
+    }
 
-  //  Race Condition защита (DB write) 
-  try {
-    await this.repo.upsert(key, geckoId);
-  } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === 'P2002') {
-        const existing = await this.repo.findBySymbol(key);
+    //  Race Condition защита (DB write)
+    try {
+      await this.repo.upsert(key, geckoId);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          const existing = await this.repo.findBySymbol(key);
 
-        if (existing) {
-          this.map.set(key, existing.geckoId);
+          if (existing) {
+            this.map.set(key, existing.geckoId);
 
-          // sync Redis тоже
-          await this.redis.set(redisKey, existing.geckoId, 60 * 60 * 24);
+            // sync Redis тоже
+            await this.redis.set(redisKey, existing.geckoId, 60 * 60 * 24);
 
-          return existing.geckoId;
+            return existing.geckoId;
+          }
         }
       }
+
+      throw error;
     }
 
-    throw error;
+    //Финальное сохранение (memory + Redis)
+    this.map.set(key, geckoId);
+    await this.redis.set(redisKey, geckoId, 60 * 60 * 24);
+
+    return geckoId;
   }
-
-  //Финальное сохранение (memory + Redis) 
-  this.map.set(key, geckoId);
-  await this.redis.set(redisKey, geckoId, 60 * 60 * 24);
-
-  return geckoId;
-}
 
   // ────── Пакетный резолвер ────────────────────────────────────
 
