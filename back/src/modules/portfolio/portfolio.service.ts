@@ -1,19 +1,45 @@
-// back\src\modules\portfolio\portfolio.service.ts
+// back/src/modules/portfolio/portfolio.service.ts
 
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { MarketService } from '../market/market.service';
 import { calculatePortfolio } from './core/calculatePortfolio';
-import { toDomain } from '../transaction/mappers/transaction.mapper';
+import type { PortfolioItem } from './types/portfolio.types';
+import type { Transaction } from '@prisma/client';
 
 @Injectable()
 export class PortfolioService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly market: MarketService,
+  ) {}
 
-  async getPortfolio() {
-    const txs = await this.prisma.transaction.findMany();
+  async getPortfolio(): Promise<PortfolioItem[]> {
+    const transactions = await this.prisma.transaction.findMany({
+      orderBy: { createdAt: 'asc' },
+    });
 
-    const domainTxs = txs.map(toDomain);
+    if (transactions.length === 0) return [];
 
-    return calculatePortfolio(domainTxs);
+    const symbols = [...new Set(transactions.map((t) => t.symbol))];
+    const marketData = await this.market.getMarketData(
+      symbols,
+      'portfolio:service',
+    );
+
+    const priceMap = new Map<
+      string,
+      { currentPrice: number; change24h: number }
+    >();
+    for (const m of marketData) {
+      priceMap.set(m.symbol, {
+        currentPrice: m.currentPrice,
+        change24h: m.change24h ?? 0,
+      });
+    }
+
+    // В рантайме Prisma возвращает ровно те поля, что ожидает Transaction,
+    // а type всегда будет 'BUY' или 'SELL'.
+    return calculatePortfolio(transactions as Transaction[], priceMap);
   }
 }

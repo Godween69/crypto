@@ -6,7 +6,7 @@
   grid-template-columns: 260px 1fr 160px; /* left | center | right */
   align-items: center;
 
-  padding: 12px 14px;
+  padding: 10px 14px;
   border-bottom: 1px solid #222;
   background: transparent;
 

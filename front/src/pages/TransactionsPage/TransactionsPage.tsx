@@ -1,62 +1,69 @@
+// front/src/pages/TransactionsPage/TransactionsPage.tsx
+
 import { useParams } from "react-router-dom";
 import { Pencil, Trash2 } from "lucide-react";
-
 import { AssetSummary } from "../../components/Portfolio/AssetSummary/AssetSummary";
-import { calculateAssetPosition } from "../../utils/calculateAssetPosition";
 import { useTransactions } from "../../hooks/useTransactions";
+import { usePortfolio } from "../../hooks/usePortfolio";
 import { useDeleteTransaction } from "../../hooks/useDeleteTransaction";
-import { useMarketData } from "../../hooks/useMarketData";
 import { formatCoinName } from "../../utils/formatCoinName";
-
 import "./TransactionsPage.css";
 
 export const TransactionPage = () => {
   const { symbol } = useParams<{ symbol: string }>();
   const { mutate: deleteTx } = useDeleteTransaction();
 
-  const transactionsQuery = useTransactions(symbol ?? "");
-  const transactions = transactionsQuery.data ?? [];
+  const txQuery = useTransactions(symbol ?? "");
+  const portfolioQuery = usePortfolio();
 
-  const marketQuery = useMarketData(symbol ? [symbol] : []);
-  const market = marketQuery.data ?? [];
-
-  const marketItem = market[0];
-  const assetName = formatCoinName(
-    marketItem?.name,
-    marketItem?.coinId,
-    symbol
+  const transactions = txQuery.data ?? [];
+  // 🔥 Берём готовую рассчитанную позицию с бэкенда
+  const position = portfolioQuery.data?.find(
+    (p) => p.symbol === symbol?.toUpperCase()
   );
 
-  // States
+  const assetName = formatCoinName(position?.name, position?.coinId, symbol);
+
   if (!symbol) return <div className="tp-state">Неверный символ</div>;
-  if (transactionsQuery.isPending || marketQuery.isPending) {
+  if (txQuery.isPending || portfolioQuery.isLoading)
     return <div className="tp-state tp-state--loading">Загрузка...</div>;
-  }
-  if (transactionsQuery.error || marketQuery.error) {
+  if (txQuery.error || portfolioQuery.error)
     return (
       <div className="tp-state tp-state--error">
         <p>Ошибка загрузки данных</p>
-        <button onClick={() => { transactionsQuery.refetch(); marketQuery.refetch(); }}>
+        <button onClick={() => { txQuery.refetch(); portfolioQuery.refetch(); }}>
           Повторить
         </button>
       </div>
     );
-  }
 
   const handleDelete = (id: string) => {
     if (!confirm("Удалить транзакцию?")) return;
     deleteTx(id);
   };
 
-  const currentPrice = marketItem?.currentPrice ?? 0;
-  const position = calculateAssetPosition(symbol, transactions, currentPrice);
+  // 🔥 Фоллбэк для закрытых позиций или если актив выведен из портфеля
+  const safePosition = position ?? {
+    symbol: symbol.toUpperCase(),
+    amount: 0,
+    currentPrice: 0,
+    totalValue: 0,
+    invested: 0,
+    totalInvested: 0,
+    netInvested: 0,
+    pnl: 0,
+    pnlPercent: 0,
+    realizedPnl: 0,
+    totalPnl: 0,
+    totalPnlPercent: 0,
+    avgBuyPrice: 0,
+    avgPrice: 0,
+    change24h: 0,
+  };
 
   return (
     <div className="tp-page">
-
-      {/*  Sticky Wrapper: Занимает место в потоке, но прилипает */}
       <div className="tp-sticky-wrapper">
-        
         <header className="tp-header">
           <h1>
             {symbol?.toUpperCase()}
@@ -66,14 +73,11 @@ export const TransactionPage = () => {
           </h1>
           <p className="tp-subtitle">История операций</p>
         </header>
-
         <section className="tp-section tp-section--summary">
-          <AssetSummary data={position} />
+          <AssetSummary data={safePosition} />
         </section>
-        
       </div>
 
-      {/* 🔥 Список: Идет сразу после враппера. Без padding-top! */}
       <section className="tp-section tp-section--list">
         {transactions.length === 0 ? (
           <div className="tp-empty">
@@ -86,7 +90,6 @@ export const TransactionPage = () => {
               const total = tx.amount * tx.price;
               const isBuy = tx.type === "BUY";
               const date = new Date(tx.createdAt);
-
               return (
                 <li key={tx.id} className="tp-row">
                   <div className="tp-cell tp-cell--type">
@@ -101,7 +104,6 @@ export const TransactionPage = () => {
                       })}
                     </time>
                   </div>
-
                   <div className="tp-cell tp-cell--details">
                     <div className="tp-amount-row">
                       <span className={`tp-amount ${isBuy ? "buy" : "sell"}`}>
@@ -114,7 +116,6 @@ export const TransactionPage = () => {
                       Всего: <strong>${total.toFixed(2)}</strong>
                     </div>
                   </div>
-
                   <div className="tp-cell tp-cell--actions">
                     <button className="btn-delete-icon" disabled title="Редактирование">
                       <Pencil size={18} />
@@ -129,7 +130,6 @@ export const TransactionPage = () => {
           </ul>
         )}
       </section>
-
     </div>
   );
 };

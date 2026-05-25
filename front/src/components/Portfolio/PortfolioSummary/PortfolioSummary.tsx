@@ -1,75 +1,115 @@
 // front/src/components/Portfolio/PortfolioSummary/PortfolioSummary.tsx
+
 import { useMemo } from "react";
-import type { PortfolioItemView } from "../../../types/portfolio.types";
-import './PortfolioSummary.css';
+import type { PortfolioItem } from "../../../types/portfolio.types";
+import "./PortfolioSummary.css";
 
 const fmt = (n: number) => n.toFixed(2);
-const getChangeClass = (v: number) => v > 0 ? 'up' : v < 0 ? 'down' : 'neutral';
-const getChangeIcon = (v: number) => v > 0 ? '▲' : v < 0 ? '▼' : '●';
+const fmtSign = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}`;
 
 interface Props {
-  items: PortfolioItemView[];
+  items: PortfolioItem[];
 }
 
 export const PortfolioSummary = ({ items }: Props) => {
   const stats = useMemo(() => {
     let currentValue = 0;
-    let currentInvested = 0;
-    let totalHistoricalInvested = 0;
     let totalRealizedPnl = 0;
     let totalUnrealizedPnl = 0;
-    let change24h = 0;
+    let totalNetInvested = 0;
+    let totalValueYesterday = 0;
 
-    // агрегируем показатели по всем активам
     for (const i of items) {
-      currentValue += i.totalValue ?? 0;
-      currentInvested += i.invested ?? 0;
-      totalHistoricalInvested += i.totalInvested ?? 0;
+      const currentVal = i.totalValue ?? 0;
+      currentValue += currentVal;
+
       totalRealizedPnl += i.realizedPnl ?? 0;
       totalUnrealizedPnl += i.pnl ?? 0;
-      change24h += i.change24hValue ?? 0;
+      totalNetInvested += i.netInvested ?? 0;
+
+      const change24hPercent = i.change24h ?? 0;
+      if (currentVal > 0 && !isNaN(change24hPercent)) {
+        const prevVal = currentVal / (1 + change24hPercent / 100);
+        totalValueYesterday += prevVal;
+      } else {
+        totalValueYesterday += currentVal;
+      }
     }
 
-    const totalPnl = totalUnrealizedPnl + totalRealizedPnl; // учитываем закрытые позиции
-    const base24h = currentValue - change24h;
-    const change24hPercent = base24h !== 0 ? (change24h / base24h) * 100 : 0;
-    const pnlPercent = totalHistoricalInvested !== 0 ? (totalPnl / totalHistoricalInvested) * 100 : 0;
+    const totalPnl = totalRealizedPnl + totalUnrealizedPnl;
+    const totalPnlPercent = totalNetInvested > 0 ? (totalPnl / totalNetInvested) * 100 : 0;
 
-    return { currentValue, currentInvested, totalPnl, pnlPercent, change24h, change24hPercent };
+    const change24hValue = currentValue - totalValueYesterday;
+    const change24hPercentTotal = totalValueYesterday > 0
+      ? (change24hValue / totalValueYesterday) * 100
+      : 0;
+
+    return {
+      currentValue,
+      totalPnl,
+      totalPnlPercent,
+      totalUnrealizedPnl,
+      totalRealizedPnl,
+      change24hValue,
+      change24hPercent: change24hPercentTotal,
+      hasRealizedPnl: Math.abs(totalRealizedPnl) > 0.01,
+    };
   }, [items]);
 
   if (!items.length) {
     return <div className="portfolio-summary portfolio-summary--empty"><span>Портфель пуст</span></div>;
   }
 
-  const class24h = getChangeClass(stats.change24h);
-  const classPnl = getChangeClass(stats.totalPnl);
+  const getPnlClass = (val: number) => (val > 0 ? "up" : val < 0 ? "down" : "neutral");
+  const getArrow = (val: number) => (val > 0 ? "▲" : val < 0 ? "▼" : "●");
+
+  const class24h = getPnlClass(stats.change24hValue);
+  const classTotalPnl = getPnlClass(stats.totalPnl);
+  const classUnrealized = getPnlClass(stats.totalUnrealizedPnl);
+  const classRealized = getPnlClass(stats.totalRealizedPnl);
 
   return (
     <div className="portfolio-summary" role="region" aria-label="Сводка портфеля">
-      {/* Текущая рыночная стоимость портфеля */}
-      <div className="ps-row ps-main" aria-label={`Стоимость: ${fmt(stats.currentValue)} долларов`}>
-        ${fmt(stats.currentValue)}
+      <div className="ps-row ps-main">
+        <span className="ps-label">Текущая стоимость</span>
+        <span className="ps-value-large">${fmt(stats.currentValue)}</span>
       </div>
 
-      {/* Изменение за 24ч */}
-      <div className="ps-row">
-        <span className={`ps-arrow ${class24h}`} aria-hidden="true">{getChangeIcon(stats.change24h)}</span>
-        <span className={`ps-value ${class24h}`}>{fmt(stats.change24h)}$</span>
-        <span className={`ps-meta ${class24h}`}>({fmt(stats.change24hPercent)}%) за сутки</span>
-        <span className="sr-only">
-          Изменение за 24 часа: {stats.change24h > 0 ? 'рост' : stats.change24h < 0 ? 'падение' : 'без изменений'} на {fmt(stats.change24hPercent)} процентов
-        </span>
+      <div className="ps-row ps-secondary">
+        <span className="ps-label">За 24ч</span>
+        <div className={`ps-pill ${class24h}`}>
+          <span className="ps-icon">{getArrow(stats.change24hValue)}</span>
+          <span>{fmtSign(stats.change24hValue)}$ ({fmt(stats.change24hPercent)}%)</span>
+        </div>
       </div>
 
-      {/* Общий PnL: включает реализованную прибыль от закрытых позиций */}
-      <div className="ps-row">
-        <span className={`ps-arrow ${classPnl}`} aria-hidden="true">{getChangeIcon(stats.totalPnl)}</span>
-        <span className={`ps-value ${classPnl}`}>{fmt(stats.totalPnl)}$</span>
-        <span className={`ps-meta ${classPnl}`}>({fmt(stats.pnlPercent)}%) общий</span>
-        <span className="sr-only">
-          Прибыль/убыток: {stats.totalPnl > 0 ? 'прибыль' : stats.totalPnl < 0 ? 'убыток' : 'нулевой результат'} {fmt(stats.pnlPercent)} процентов
-        </span>
+      <div className="ps-divider"></div>
+
+      <div className="ps-row ps-highlight">
+        <span className="ps-label">Общий результат (PnL)</span>
+        <div className={`ps-total-pnl ${classTotalPnl}`}>
+          <span className="ps-icon">{getArrow(stats.totalPnl)}</span>
+          <span className="ps-value-bold">{fmtSign(stats.totalPnl)}$</span>
+          <span className="ps-percent">({fmt(stats.totalPnlPercent)}%)</span>
+        </div>
+      </div>
+
+      <div className="ps-breakdown">
+        <div className="ps-detail-row">
+          <span className="ps-detail-label">Нереализованный</span>
+          <span className={`ps-detail-value ${classUnrealized}`}>
+            {fmtSign(stats.totalUnrealizedPnl)}$
+          </span>
+        </div>
+
+        {stats.hasRealizedPnl && (
+          <div className="ps-detail-row">
+            <span className="ps-detail-label">Реализованный</span>
+            <span className={`ps-detail-value ${classRealized}`}>
+              {fmtSign(stats.totalRealizedPnl)}$
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,10 +1,3 @@
-export type TransactionType = 'BUY' | 'SELL';
+// back/src/modules/transaction/types/transaction.types.ts
 
-export interface Transaction {
-  id: string;
-  symbol: string;
-  type: TransactionType;
-  amount: number;
-  price: number;
-  createdAt: Date;
-}
+export type TransactionType = 'BUY' | 'SELL';

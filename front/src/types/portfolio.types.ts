@@ -1,12 +1,5 @@
-// Базовая модель из бэкенда (агрегация транзакций)
-export type PortfolioItem = {
-  symbol: string;
-  amount: number;
-  avgPrice: number;
-  invested: number; // Себестоимость текущего остатка
-};
+// front/src/types/portfolio.types.ts
 
-// Данные от внешнего API (CoinGecko)
 export type MarketData = {
   coinId: string;
   symbol: string;
@@ -17,38 +10,26 @@ export type MarketData = {
   name: string;
 };
 
-// UI-модель для главной страницы портфеля
-export type PortfolioItemView = PortfolioItem &
-  Partial<MarketData> & {
-    totalValue?: number;
-
-    // P&L текущего остатка (нереализованный)
-    pnl?: number;
-    pnlPercent?: number;
-
-    // ✅ Новые поля для консистентности с AssetPosition
-    totalInvested?: number; // Всего вложено исторически
-    realizedPnl?: number; // Зафиксированная прибыль от продаж
-    totalPnl?: number; // Общий P&L (realized + unrealized)
-    totalPnlPercent?: number; // Процент от всех вложений
-
-    change24hValue?: number; // Абсолютное изменение за 24ч ($)
-  };
-
-export type PortfolioView = PortfolioItemView[];
-
-// Детальная позиция актива (страница транзакций / аналитика)
-export type AssetPosition = {
+// Полная синхронизация с бэкенд-DTO
+export type PortfolioItem = {
   symbol: string;
   amount: number;
+  avgPrice: number;             
+  invested: number;
   currentPrice: number;
   totalValue: number;
-  invested: number; // Себестоимость текущего остатка
-  totalInvested: number; // Всего вложено исторически
-  pnl: number; // Нереализованный P&L
+  change24h: number;
+  pnl: number;
   pnlPercent: number;
-  realizedPnl: number; // Зафиксированная прибыль/убыток
-  totalPnl: number; // Общий P&L (realized + unrealized)
-  totalPnlPercent: number; // Процент от всех вложений
-  avgBuyPrice?: number;
+  realizedPnl: number;
+  totalPnl: number;
+  totalPnlPercent: number;
+  netInvested: number;
+  totalInvested: number;
+  
+  // UI-поля (опционально, обогащаются на фронте или бэкенде)
+  name?: string;
+  image?: string;
+  rank?: number;
+  coinId?: string;
 };

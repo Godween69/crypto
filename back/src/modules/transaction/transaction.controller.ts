@@ -16,7 +16,7 @@ import { TransactionService } from './transaction.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 
-import { Transaction } from './types/transaction.types';
+import { Transaction } from '@prisma/client';
 
 @Controller('transactions')
 export class TransactionController {

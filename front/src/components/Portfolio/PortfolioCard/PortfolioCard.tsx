@@ -1,6 +1,6 @@
 // front/src/components/Portfolio/PortfolioCard/PortfolioCard.tsx
 
-import type { PortfolioItemView } from "../../../types/portfolio.types";
+import type { PortfolioItem } from "../../../types/portfolio.types";
 import { Trash2 } from "lucide-react";
 import { useDeletePortfolioItem } from "../../../hooks/useDeletePortfolioItem";
 import { formatCoinName } from "../../../utils/formatCoinName";
@@ -8,7 +8,7 @@ import { formatCoinName } from "../../../utils/formatCoinName";
 import "./PortfolioCard.css";
 
 interface Props {
-  item: PortfolioItemView;
+  item: PortfolioItem;
   onOpen: (symbol: string) => void;
 }
 

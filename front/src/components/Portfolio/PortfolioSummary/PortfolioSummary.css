@@ -1,96 +1,117 @@
-/* Контейнер сводки */
+/* front/src/components/Portfolio/PortfolioSummary/PortfolioSummary.css */
+
 .portfolio-summary {
-  background: #1a1a1a88;
-  border: 1px solid #2a2a2a;
-  border-radius: 14px;
-  padding: 15px 10px;
-  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  width: 100%;
-  max-width: 210px;
-  transition: border-color 0.2s ease;
+  /* max-width: 430px; */
+  gap: 5px;
+  padding: 15px;
+  justify-self: end;
+  background: #13172228;
+  border-radius: 12px;
+  border: 1px solid #2a2f3a;
 }
 
-.portfolio-summary:hover {
-  border-color: #444;
-}
-
-/* Строка данных */
 .ps-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ps-label {
+  font-size: 13px;
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.ps-main .ps-value-large {
+  font-size: 28px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.5px;
+}
+
+.ps-secondary .ps-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ps-highlight {
+  margin-top: 4px;
+  gap: 10px;
+}
+
+.ps-total-pnl {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-/* Крупная цифра (вложено) */
-.ps-main {
-  font-size: 25px;
+  font-size: 18px;
   font-weight: 700;
-  line-height: 1.2;
-  color: #ffffff;
 }
 
-/* Значение (сумма) */
-.ps-value {
-  font-size: 15px;
+.ps-value-bold {
+  font-size: 18px;
+}
+
+.ps-percent {
+  font-size: 14px;
+  opacity: 0.8;
+  font-weight: 500;
+}
+
+.ps-divider {
+  height: 1px;
+  background: #2a2f3a;
+  margin: 4px 0;
+}
+
+.ps-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.ps-detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.ps-detail-label {
+  color: #6b7280;
+}
+
+.ps-detail-value {
   font-weight: 600;
-  color: #ffffff; /* дефолт */
-  transition: color 0.2s ease;
+  font-family: monospace;
 }
 
-/* Мета (проценты + подпись) */
-.ps-meta {
-  font-size: 12px;
-  color: #b0b0b0; /* дефолт */
-  transition: color 0.2s ease;
+/* Цвета */
+.up {
+  color: #22c55e;
+}
+.down {
+  color: #ef4444;
+}
+.neutral {
+  color: #9ca3af;
 }
 
-/* Стрелка */
-.ps-arrow {
-  display: inline-flex;
-  align-items: center;
-  transition: color 0.2s ease;
+.ps-icon {
+  font-size: 10px;
+  margin-right: 2px;
 }
 
-/* === ЦВЕТОВЫЕ СОСТОЯНИЯ (красят стрелку, сумму и проценты одновременно) === */
-.ps-arrow.up, .ps-value.up, .ps-meta.up {
-  color: #4caf50;
-}
-
-.ps-arrow.down, .ps-value.down, .ps-meta.down {
-  color: #f44336;
-}
-
-.ps-arrow.neutral, .ps-value.neutral, .ps-meta.neutral {
-  color: #9e9e9e;
-}
-
-/* Пустое состояние */
 .portfolio-summary--empty {
+  padding: 20px;
   text-align: center;
-  padding: 24px;
-  color: #b0b0b0;
-  font-style: italic;
-}
-
-/* Скрытый текст для скринридеров */
-.sr-only {
-  position: absolute;
-  width: 1px; height: 1px;
-  padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0,0,0,0);
-  white-space: nowrap; border: 0;
-}
-
-/* Адаптив */
-@media (max-width: 480px) {
-  .portfolio-summary {
-    max-width: 100%;
-    padding: 16px;
-  }
-  .ps-main { font-size: 18px; }
-  .ps-value { font-size: 13px; }
-  .ps-meta { font-size: 11px; }
+  color: #6b7280;
+  font-size: 14px;
 }

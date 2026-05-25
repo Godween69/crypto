@@ -1,5 +1,6 @@
 import { Transaction as PrismaTransaction } from '@prisma/client';
-import { Transaction, TransactionType } from '../types/transaction.types';
+import type { TransactionType } from '../types/transaction.types';
+import { Transaction } from '@prisma/client';
 
 function assertTransactionType(type: string): TransactionType {
   if (type === 'BUY' || type === 'SELL') return type;

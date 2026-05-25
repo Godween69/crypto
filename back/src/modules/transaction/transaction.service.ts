@@ -5,7 +5,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { toDomain } from './mappers/transaction.mapper';
-import { Transaction } from './types/transaction.types';
+import { Transaction } from '@prisma/client';
 import { PortfolioSnapshotService } from '../../analytics/portfolio-snapshot.service';
 
 @Injectable()

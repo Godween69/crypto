@@ -1,12 +1,12 @@
 // front/src/components/Portfolio/PortfolioGrid/PortfolioGrid.tsx
 
-import type { PortfolioItemView } from "../../../types/portfolio.types";
+import type { PortfolioItem } from "../../../types/portfolio.types";
 import { PortfolioCard } from "../PortfolioCard/PortfolioCard";
 
 import './PortfolioGrid.css'
 
 interface Props {
-  items: PortfolioItemView[];
+  items: PortfolioItem[];
   onOpen: (symbol: string) => void;
 }
 
