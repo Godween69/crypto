@@ -30,6 +30,9 @@ export class JwtWsGuard implements CanActivate {
     }
 
     if (!token) {
+      this.logger?.debug(
+        `[JwtWsGuard] Токен не найден для clientId=${client.id}`,
+      );
       throw new WsException(new UnauthorizedException('Токен не передан'));
     }
 
@@ -37,10 +40,20 @@ export class JwtWsGuard implements CanActivate {
       const payload = await this.jwt.verifyAsync(token);
       (client.data as any).user = { id: payload.sub, email: payload.email };
       return true;
-    } catch {
+    } catch (err) {
+      if (err instanceof Error) {
+        this.logger?.debug(
+          `[JwtWsGuard] Ошибка верификации токена: ${err.message}`,
+        );
+      }
       throw new WsException(
         new UnauthorizedException('Невалидный или истёкший токен'),
       );
     }
   }
+
+  // Добавляем логгер для отладки, если нужно
+  private readonly logger = new (require('@nestjs/common').Logger)(
+    JwtWsGuard.name,
+  );
 }

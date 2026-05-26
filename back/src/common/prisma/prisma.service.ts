@@ -1,10 +1,9 @@
 // back/src/common/prisma/prisma.service.ts
 
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { ClsService } from 'nestjs-cls';
 
-// Модели, требующие обязательной фильтрации по пользователю
 const USER_SCOPED_MODELS = [
   'Transaction',
   'PortfolioSnapshot',
@@ -13,53 +12,62 @@ const USER_SCOPED_MODELS = [
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
-  // Расширенный клиент с автоматической изоляцией данных
   public x: PrismaClient;
+  private readonly logger = new Logger(PrismaService.name);
 
   constructor(private readonly cls: ClsService) {
     super();
-    // Передаём cls через замыкание, так как $extends не поддерживает DI
-    this.x = this.$extends({
+    this.x = this.createExtendedClient();
+  }
+
+  async onModuleInit() {
+    await this.$connect();
+    this.logger.log('[Prisma] Подключение к БД установлено');
+  }
+
+  private createExtendedClient(): PrismaClient {
+    const clsRef = this.cls;
+    const loggerRef = this.logger;
+
+    return this.$extends({
       query: {
         $allModels: {
           $allOperations: ({ model, operation, args, query }) => {
-            // Пропускаем модели, не требующие изоляции
+            // Логируем только пользовательские модели для чистоты логов
             if (!model || !USER_SCOPED_MODELS.includes(model)) {
               return query(args);
             }
 
-            const userId = cls.get<string | null>('userId');
+            const userId = clsRef.get<string | null>('userId');
             const bypassFilter =
-              cls.get<boolean>('bypassUserIdFilter') ?? false;
+              clsRef.get<boolean>('bypassUserIdFilter') ?? false;
 
-            // Разрешаем системные операции при явном флаге bypass
-            if (bypassFilter) return query(args);
+            loggerRef.debug(
+              `[Prisma] Операция: ${model}.${operation}, userId в CLS: ${userId}, bypass: ${bypassFilter}`,
+            );
 
-            // Блокируем доступ при отсутствии userId в контексте
-            if (!userId) {
-              throw new Error(
-                `Access denied: userId missing in CLS for ${model}.${operation}`,
-              );
+            if (bypassFilter) {
+              loggerRef.debug(`[Prisma] Bypass активен, пропускаем фильтрацию`);
+              return query(args);
             }
 
-            // Защита от подмены userId в where-клаузе
+            if (!userId) {
+              const error = `Access denied: userId missing in CLS for ${model}.${operation}`;
+              loggerRef.error(`[Prisma] ${error}`);
+              throw new Error(error);
+            }
+
+            // Защита от подмены userId
             if (
               (args as any)?.where?.userId &&
               (args as any).where.userId !== userId
             ) {
-              throw new Error(
-                `Security violation: attempt to access different user's ${model}`,
-              );
+              const error = `Security violation: attempt to access different user's ${model}`;
+              loggerRef.error(`[Prisma] ${error}`);
+              throw new Error(error);
             }
 
-            // Логирование в режиме разработки
-            if (process.env.NODE_ENV === 'development') {
-              console.debug(
-                `[Prisma] User scope: ${model}.${operation} userId=${userId}`,
-              );
-            }
-
-            // READ: фильтруем все операции чтения
+            // READ операции
             if (
               [
                 'findMany',
@@ -70,27 +78,35 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
               ].includes(operation)
             ) {
               (args as any).where = { ...(args as any).where, userId };
+              loggerRef.debug(
+                `[Prisma] Добавлен фильтр where.userId=${userId}`,
+              );
             }
 
-            // CREATE: привязываем запись к пользователю
+            // CREATE операция
             if (operation === 'create') {
               (args as any).data = { ...(args as any).data, userId };
+              loggerRef.debug(`[Prisma] Добавлен data.userId=${userId}`);
             }
 
-            // UPDATE/DELETE: защищаем от чужих записей
+            // UPDATE/DELETE операции
             if (
               ['update', 'delete', 'updateMany', 'deleteMany'].includes(
                 operation,
               )
             ) {
               (args as any).where = { ...(args as any).where, userId };
+              loggerRef.debug(
+                `[Prisma] Добавлен фильтр where.userId=${userId}`,
+              );
             }
 
-            // UPSERT: применяем userId ко всем частям
+            // UPSERT операция
             if (operation === 'upsert') {
               (args as any).where = { ...(args as any).where, userId };
               (args as any).create = { ...(args as any).create, userId };
               (args as any).update = { ...(args as any).update, userId };
+              loggerRef.debug(`[Prisma] Добавлен userId во все части upsert`);
             }
 
             return query(args);
@@ -98,9 +114,5 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         },
       },
     }) as unknown as PrismaClient;
-  }
-
-  async onModuleInit() {
-    await this.$connect();
   }
 }

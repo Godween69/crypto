@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { useAuthStore } from "../store/authStore";
 import type { PortfolioItem } from "../types/portfolio.types";
 
 const getPortfolio = async (): Promise<PortfolioItem[]> => {
@@ -10,9 +11,13 @@ const getPortfolio = async (): Promise<PortfolioItem[]> => {
 };
 
 export const usePortfolio = () => {
+  const userId = useAuthStore((state) => state.user?.id);
+
   return useQuery({
-    queryKey: ["portfolio"],
+    queryKey: ["portfolio", userId],
     queryFn: getPortfolio,
-    staleTime: 60_000, // 60 сек кэш, инвалидируется через WS/события
+    staleTime: 60_000,
+    // Запрос выполняется ТОЛЬКО при наличии userId
+    enabled: !!userId,
   });
 };

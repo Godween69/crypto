@@ -3,11 +3,13 @@
 import {
   Body,
   Controller,
+  Get,
   Post,
   Req,
   Res,
   UseGuards,
   UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
@@ -19,7 +21,19 @@ import { CurrentUser } from './decorators/current-user.decorator';
 
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(private auth: AuthService) {}
+
+  // Новый эндпоинт для получения профиля текущего пользователя
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  async getMe(@CurrentUser() user: { id: string; email: string }) {
+    this.logger.log(
+      `[Auth:Me] Запрос профиля: userId=${user.id}, email=${user.email}`,
+    );
+    return { id: user.id, email: user.email }; //  Возвращаем ID
+  }
 
   @Public()
   @Post('register')
@@ -28,8 +42,12 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    this.logger.log(`[AuthController] Начало регистрации: ${dto.email}`);
     const tokens = await this.auth.register(dto, this.extractMeta(req));
     this.setCookieTokens(res, tokens);
+    this.logger.log(
+      `[AuthController] Куки установлены для регистрации: ${dto.email}`,
+    );
     return { user: { email: dto.email, displayName: dto.displayName } };
   }
 
@@ -40,8 +58,12 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    this.logger.log(`[AuthController] Начало входа: ${dto.email}`);
     const tokens = await this.auth.login(dto, this.extractMeta(req));
     this.setCookieTokens(res, tokens);
+    this.logger.log(
+      `[AuthController] Куки установлены для входа: ${dto.email}`,
+    );
     return { ok: true };
   }
 
@@ -52,10 +74,14 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const oldRefresh = req.cookies?.refresh_token;
-    if (!oldRefresh)
+    if (!oldRefresh) {
+      this.logger.warn(`[AuthController] Refresh token отсутствует в куках`);
       throw new UnauthorizedException('Refresh token отсутствует');
+    }
+    this.logger.log(`[AuthController] Обновление токенов`);
     const tokens = await this.auth.refresh(oldRefresh, this.extractMeta(req));
     this.setCookieTokens(res, tokens);
+    this.logger.log(`[AuthController] Новые куки установлены при рефреше`);
     return { ok: true };
   }
 
@@ -65,6 +91,7 @@ export class AuthController {
     const refresh = req.cookies?.refresh_token;
     await this.auth.logout(refresh);
     this.clearCookieTokens(res);
+    this.logger.log(`[AuthController] Выход выполнен`);
     return { ok: true };
   }
 
@@ -76,10 +103,12 @@ export class AuthController {
   ) {
     await this.auth.logoutAll(user.id);
     this.clearCookieTokens(res);
+    this.logger.log(
+      `[AuthController] Выход со всех устройств для userId=${user.id}`,
+    );
     return { ok: true };
   }
 
-  // Извлекает метаданные запроса для защиты от кражи токенов
   private extractMeta(req: Request) {
     return {
       ip:
@@ -90,7 +119,6 @@ export class AuthController {
     };
   }
 
-  // Кладём access и refresh в httpOnly cookies
   private setCookieTokens(
     res: Response,
     tokens: { accessToken: string; refreshToken: string },
@@ -109,7 +137,6 @@ export class AuthController {
     });
   }
 
-  // Очищает обе cookie при выходе
   private clearCookieTokens(res: Response) {
     res.clearCookie('access_token', { path: '/' });
     res.clearCookie('refresh_token', { path: '/auth/refresh' });

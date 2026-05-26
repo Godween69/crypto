@@ -16,9 +16,7 @@ import { Public } from '../auth/decorators/public.decorator';
   cors: { origin: '*', credentials: true },
   namespace: 'market',
 })
-// Важно: @Public() НЕ делает endpoint открытым для всех. Он лишь отключает глобальный HTTP-Guard. Безопасность обеспечивается вторым уровнем.
 @Public() // Пропускаем глобальный HTTP JwtAuthGuard для WS-handshake
-// Срабатывает ПОСЛЕ установки WS-соединения
 @UseGuards(JwtWsGuard) // Проверяем токен из cookie/auth.token при подключении
 export class MarketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server!: Server;
@@ -30,10 +28,20 @@ export class MarketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private nextUpdateAt = Date.now() + this.WS_INTERVAL_MS;
 
   handleConnection(@ConnectedSocket() client: Socket) {
-    this.activeConnections++;
     const user = (client.data as any).user;
+
+    // Критическая проверка: если Guard пропустил без user, закрываем соединение
+    if (!user || !user.id) {
+      this.logger.warn(
+        `WS подключение отклонено: отсутствует пользователь (clientId=${client.id})`,
+      );
+      client.disconnect(true); // Принудительно закрываем сокет
+      return;
+    }
+
+    this.activeConnections++;
     this.logger.log(
-      `WS подключён: ${client.id} userId=${user?.id} (активных: ${this.activeConnections})`,
+      `WS подключён: ${client.id} userId=${user.id} (активных: ${this.activeConnections})`,
     );
 
     // Пересчёт устаревшей метки до ближайшего 5-мин слота

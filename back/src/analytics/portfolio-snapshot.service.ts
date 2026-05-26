@@ -14,52 +14,83 @@ export class PortfolioSnapshotService {
 
   // Ключ distributed lock для предотвращения одновременного выполнения appendMarketSnapshot
   private readonly APPEND_LOCK_KEY = 'lock:appendMarketSnapshot';
-  private readonly APPEND_LOCK_TTL = 30; // секунд
+  private readonly APPEND_LOCK_TTL = 30;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly market: MarketService,
     private readonly redis: RedisService,
-    private readonly cls: ClsService, // CLS для установки userId в системных задачах
+    private readonly cls: ClsService,
   ) {}
 
-  // Полная пересборка истории для ВСЕХ пользователей (вызывается при изменении транзакций)
+  // Полная пересборка истории для ВСЕХ пользователей с транзакциями
   async rebuild() {
-    // Системная операция: bypass фильтрации для получения списка пользователей
+    this.logger.log(
+      '[Snapshot:Rebuild] Начало полной пересборки для всех пользователей',
+    );
+
     const users = await this.cls.run(async () => {
       this.cls.set('bypassUserIdFilter', true);
-      return this.prisma.x.user.findMany({ select: { id: true } });
+      return this.prisma.x.user.findMany({
+        select: { id: true },
+        where: { transactions: { some: {} } },
+      });
     });
 
+    this.logger.log(
+      `[Snapshot:Rebuild] Найдено ${users.length} пользователей с транзакциями`,
+    );
+
     for (const user of users) {
-      await this.rebuildForUser(user.id);
+      try {
+        await this.rebuildForUser(user.id);
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          this.logger.error(
+            `[Snapshot:Rebuild] Ошибка rebuild для userId=${user.id}: ${err.message}`,
+            err.stack,
+          );
+        } else {
+          this.logger.error(
+            `[Snapshot:Rebuild] Неизвестная ошибка rebuild для userId=${user.id}`,
+          );
+        }
+      }
     }
+
+    this.logger.log('[Snapshot:Rebuild] Полная пересборка завершена');
   }
 
   // Пересборка истории для конкретного пользователя
   async rebuildForUser(userId: string) {
+    this.logger.debug(
+      `[Snapshot:RebuildUser] Начало rebuild для userId=${userId}`,
+    );
+
     await this.cls.run(async () => {
       this.cls.set('userId', userId);
 
-      this.logger.log(`🔄 Полная пересборка истории для userId=${userId}...`);
-      // Используем расширенный клиент x для автоматической фильтрации по userId
       const txs = await this.prisma.x.transaction.findMany({
         orderBy: { createdAt: 'asc' },
       });
+      this.logger.debug(
+        `[Snapshot:RebuildUser] Найдено транзакций: ${txs.length} для userId=${userId}`,
+      );
 
       if (txs.length === 0) {
-        this.logger.log(
-          `🔄 rebuild: транзакций нет, очищаем 1h-снимки для userId=${userId}`,
+        this.logger.debug(
+          `[Snapshot:RebuildUser] Транзакций нет, очищаем 1h-снимки для userId=${userId}`,
         );
-        await this.prisma.x.portfolioSnapshot.deleteMany({
-          where: { granularity: '1h' },
+        await this.cls.run(async () => {
+          this.cls.set('bypassUserIdFilter', true);
+          await this.prisma.x.portfolioSnapshot.deleteMany({
+            where: { granularity: '1h', userId },
+          });
         });
         return;
       }
 
-      this.logger.log(
-        `🔄 rebuild: найдено транзакций: ${txs.length}, начинаем симуляцию баланса`,
-      );
+      // Симуляция баланса по транзакциям
       const balances = new Map<string, number>();
       const lastPrices = new Map<string, number>();
       const snapshots: {
@@ -91,13 +122,18 @@ export class PortfolioSnapshotService {
         }
       }
 
-      // Финальная точка: всегда берём актуальные цены
+      this.logger.debug(
+        `[Snapshot:RebuildUser] Рассчитано ${snapshots.length} точек из транзакций`,
+      );
+
+      // Финальная точка с актуальными рыночными ценами
       const activeSymbols = Array.from(balances.keys()).filter(
         (s) => (balances.get(s) ?? 0) > this.MIN_BALANCE,
       );
+
       if (activeSymbols.length > 0) {
-        this.logger.log(
-          `🔄 rebuild: запрашиваем актуальные цены для финальной точки [${activeSymbols.join(', ')}]`,
+        this.logger.debug(
+          `[Snapshot:RebuildUser] Запрос актуальных цен для [${activeSymbols.join(', ')}]`,
         );
         const currentPrices = await this.market.getMarketData(
           activeSymbols,
@@ -119,27 +155,60 @@ export class PortfolioSnapshotService {
             granularity: '1h',
             totalValue: finalValue,
           });
+          this.logger.debug(
+            `[Snapshot:RebuildUser] Финальная точка: $${finalValue}`,
+          );
         }
       }
 
-      // Атомарная замена снапшотов для текущего пользователя через расширенный клиент
-      await this.prisma.x.$transaction([
-        this.prisma.x.portfolioSnapshot.deleteMany({
-          where: { granularity: '1h' },
-        }),
-        this.prisma.x.portfolioSnapshot.createMany({ data: snapshots as any }), // userId внедряется middleware
-      ]);
+      // Атомарная замена снапшотов с детальным логированием
+      try {
+        await this.cls.run(async () => {
+          this.cls.set('bypassUserIdFilter', true);
 
-      this.logger.log(
-        `📊 Snapshot rebuilt для userId=${userId}: ${snapshots.length} points saved.`,
-      );
+          this.logger.debug(
+            `[Snapshot:RebuildUser] Удаление старых 1h-снапшотов для userId=${userId}`,
+          );
+          const deleted = await this.prisma.x.portfolioSnapshot.deleteMany({
+            where: { granularity: '1h', userId },
+          });
+          this.logger.debug(
+            `[Snapshot:RebuildUser] Удалено ${deleted.count} старых снапшотов`,
+          );
+
+          if (snapshots.length > 0) {
+            this.logger.debug(
+              `[Snapshot:RebuildUser] Создание ${snapshots.length} новых снапшотов для userId=${userId}`,
+            );
+            await this.prisma.x.portfolioSnapshot.createMany({
+              data: snapshots.map((s) => ({ ...s, userId })) as any,
+            });
+          }
+        });
+
+        this.logger.log(
+          `[Snapshot:RebuildUser] Rebuilt успешно: userId=${userId}, точек=${snapshots.length}`,
+        );
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          this.logger.error(
+            `[Snapshot:RebuildUser] Ошибка при сохранении снапшотов для userId=${userId}: ${err.message}`,
+            err.stack,
+          );
+        } else {
+          this.logger.error(
+            `[Snapshot:RebuildUser] Неизвестная ошибка при сохранении снапшотов для userId=${userId}`,
+          );
+        }
+        throw err;
+      }
     });
   }
 
   // Крон каждые 5 минут: добавляет точку для всех активных пользователей
   @Cron(CronExpression.EVERY_5_MINUTES)
   async appendMarketSnapshot() {
-    this.logger.debug('⏰ appendMarketSnapshot [cron:append:5m] сработал');
+    this.logger.debug('[Snapshot:Append] Cron appendMarketSnapshot сработал');
     await this.doAppendMarketSnapshot('cron:append:5m');
   }
 
@@ -151,13 +220,12 @@ export class PortfolioSnapshotService {
     );
     if (!acquired) {
       this.logger.debug(
-        `⏭️ [${caller}] Пропуск: другой процесс уже выполняет appendMarketSnapshot (лок занят)`,
+        `[Snapshot:Append] Пропуск: лок занят другим процессом`,
       );
       return;
     }
 
     try {
-      // Получаем всех пользователей с транзакциями (bypass для системной операции)
       const users = await this.cls.run(async () => {
         this.cls.set('bypassUserIdFilter', true);
         return this.prisma.x.user.findMany({
@@ -165,6 +233,10 @@ export class PortfolioSnapshotService {
           where: { transactions: { some: {} } },
         });
       });
+
+      this.logger.debug(
+        `[Snapshot:Append] Найдено ${users.length} пользователей для append`,
+      );
 
       for (const user of users) {
         await this.appendSnapshotForUser(user.id, caller);
@@ -189,7 +261,7 @@ export class PortfolioSnapshotService {
       const fourMinutesAgo = new Date(Date.now() - 4 * 60_000);
       if (last && last.timestamp > fourMinutesAgo) {
         this.logger.debug(
-          `⏭️ [${caller}] Пропуск для userId=${userId}: последняя точка создана недавно`,
+          `[Snapshot:Append] Пропуск для userId=${userId}: последняя точка создана недавно`,
         );
         return;
       }
@@ -228,17 +300,33 @@ export class PortfolioSnapshotService {
 
       const rounded = Number(marketTotal.toFixed(2));
       if (rounded > 0) {
-        // Используем расширенный клиент x: middleware автоматически добавит userId
-        await this.prisma.x.portfolioSnapshot.create({
-          data: {
-            timestamp: new Date(),
-            granularity: '1h',
-            totalValue: rounded,
-          } as any,
-        });
-        this.logger.log(
-          `💾 [${caller}] Snapshot appended для userId=${userId}: $${rounded}`,
-        );
+        try {
+          await this.cls.run(async () => {
+            this.cls.set('bypassUserIdFilter', true);
+            await this.prisma.x.portfolioSnapshot.create({
+              data: {
+                timestamp: new Date(),
+                granularity: '1h',
+                totalValue: rounded,
+                userId,
+              } as any,
+            });
+          });
+          this.logger.log(
+            `[Snapshot:Append] Точка добавлена: userId=${userId}, $${rounded}`,
+          );
+        } catch (err: unknown) {
+          if (err instanceof Error) {
+            this.logger.error(
+              `[Snapshot:Append] Ошибка создания снапшота для userId=${userId}: ${err.message}`,
+              err.stack,
+            );
+          } else {
+            this.logger.error(
+              `[Snapshot:Append] Неизвестная ошибка создания снапшота для userId=${userId}`,
+            );
+          }
+        }
       }
     });
   }
@@ -246,21 +334,21 @@ export class PortfolioSnapshotService {
   // Rollup кроны: агрегация по всем пользователям
   @Cron('5 0 * * *')
   async rollup1hTo1d() {
-    this.logger.debug('📦 rollup1hTo1d: старт ежедневной агрегации');
+    this.logger.debug('[Snapshot:Rollup] Старт ежедневной агрегации 1h→1d');
     await this.aggregateLevel('1h', '1d', 24);
     await this.cleanupOldPoints('1h', 7);
   }
 
   @Cron('10 0 * * 0')
   async rollup1dTo1w() {
-    this.logger.debug('📦 rollup1dTo1w: старт еженедельной агрегации');
+    this.logger.debug('[Snapshot:Rollup] Старт еженедельной агрегации 1d→1w');
     await this.aggregateLevel('1d', '1w', 7);
     await this.cleanupOldPoints('1d', 90);
   }
 
   @Cron('15 0 1 * *')
   async rollup1wTo1m() {
-    this.logger.debug('📦 rollup1wTo1m: старт ежемесячной агрегации');
+    this.logger.debug('[Snapshot:Rollup] Старт ежемесячной агрегации 1w→1m');
     await this.aggregateLevel('1w', '1m', 31);
     await this.cleanupOldPoints('1w', 365);
   }
@@ -271,7 +359,6 @@ export class PortfolioSnapshotService {
     target: string,
     windowHours: number,
   ) {
-    // Bypass для системной операции: работаем со всеми пользователями
     await this.cls.run(async () => {
       this.cls.set('bypassUserIdFilter', true);
 
@@ -282,7 +369,7 @@ export class PortfolioSnapshotService {
       });
       if (!latest) {
         this.logger.debug(
-          `📦 aggregateLevel ${source}→${target}: нет данных за последние ${windowHours}ч`,
+          `[Snapshot:Rollup] Нет данных ${source} за последние ${windowHours}ч`,
         );
         return;
       }
@@ -292,10 +379,12 @@ export class PortfolioSnapshotService {
           timestamp: new Date(),
           granularity: target,
           totalValue: latest.totalValue,
-          userId: latest.userId, // Сохраняем принадлежность пользователю
+          userId: latest.userId,
         } as any,
       });
-      this.logger.log(`📦 Rollup ${source}→${target}: $${latest.totalValue}`);
+      this.logger.log(
+        `[Snapshot:Rollup] ${source}→${target}: $${latest.totalValue} для userId=${latest.userId}`,
+      );
     });
   }
 
@@ -310,7 +399,7 @@ export class PortfolioSnapshotService {
       });
       if (deleted.count > 0) {
         this.logger.log(
-          `🧹 Cleaned ${deleted.count} old ${granularity} (старше ${maxAgeDays} дней)`,
+          `[Snapshot:Cleanup] Удалено ${deleted.count} старых точек ${granularity} (старше ${maxAgeDays} дней)`,
         );
       }
     });

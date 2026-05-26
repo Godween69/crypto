@@ -1,25 +1,30 @@
-// hooks/useCreateTransaction.ts
+// front/src/hooks/useCreateTransaction.ts
+
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createTransaction } from "../api/transaction.api";
+import { useAuthStore } from "../store/authStore";
 
 export const useCreateTransaction = () => {
-  const queryClient = useQueryClient(); // 🔹 Доступ к кэшу React Query
+  const queryClient = useQueryClient();
+  // Получаем ID текущего пользователя для изоляции кэша
+  const userId = useAuthStore((state) => state.user?.id);
 
   return useMutation({
     mutationFn: createTransaction,
-
-    // onSuccess получает (data, variables) variables это то, что отправили в мутацию
     onSuccess: (_, variables) => {
-      // Обновляем портфель (балансы изменились)
-      queryClient.invalidateQueries({
-        queryKey: ["portfolio"], 
-      });
+      console.log(
+        `[CreateTx] Успех для userId=${userId}, символ=${variables.symbol}`,
+      );
 
-      // Обновляем список транзакций для конкретного символа
-      // Должно точно совпадать с queryKey в useTransactions(symbol)
+      // Инвалидируем кэш ТОЛЬКО текущего пользователя
+      queryClient.invalidateQueries({ queryKey: ["portfolio", userId] });
       queryClient.invalidateQueries({
-        queryKey: ["transactions", variables.symbol], 
+        queryKey: ["transactions", userId, variables.symbol],
       });
+      queryClient.invalidateQueries({ queryKey: ["portfolio-index", userId] });
+
+      // Диспатчим событие для компонентов, слушающих его напрямую
+      window.dispatchEvent(new CustomEvent("portfolio:transaction:success"));
     },
   });
 };
