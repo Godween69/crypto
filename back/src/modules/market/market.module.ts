@@ -1,18 +1,17 @@
-// back\src\modules\market\market.module.ts
+// back/src/modules/market/market.module.ts
 
 import { Module } from '@nestjs/common';
-
+import { AuthModule } from '../auth/auth.module'; // JwtWsGuard
 import { MarketService } from './market.service';
 import { MarketController } from './market.controller';
 import { CoinResolverService } from './coin-resolver.service';
 import { CoinRepository } from './coin.repository';
-
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { RedisModule } from '../../redis/redis.module';
-import { MarketGateway } from './market.gateway'; // импорт шлюза
+import { MarketGateway } from './market.gateway';
 
 @Module({
-  imports: [PrismaModule, RedisModule],
+  imports: [AuthModule, PrismaModule, RedisModule],
   controllers: [MarketController],
   providers: [
     MarketService,
