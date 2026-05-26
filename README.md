@@ -16,6 +16,10 @@ crypto
 │  │  │  │  └─ migration.sql
 │  │  │  ├─ 20260522130115_add_portfolio_snapshot_with_granularity
 │  │  │  │  └─ migration.sql
+│  │  │  ├─ 20260526120617_add_multi_user_auth
+│  │  │  │  └─ migration.sql
+│  │  │  ├─ 20260526121009_sync_schema_after_manual_migration
+│  │  │  │  └─ migration.sql
 │  │  │  └─ migration_lock.toml
 │  │  └─ schema.prisma
 │  ├─ README.md
@@ -37,6 +41,9 @@ crypto
 │  │  ├─ interceptors
 │  │  ├─ main.ts
 │  │  ├─ modules
+│  │  │  ├─ auth
+│  │  │  │  └─ middleware
+│  │  │  │     └─ user-context.middleware.ts
 │  │  │  ├─ market
 │  │  │  │  ├─ coin-resolver.service.ts
 │  │  │  │  ├─ coin.repository.ts
@@ -56,7 +63,6 @@ crypto
 │  │  │  │  └─ types
 │  │  │  │     └─ portfolio.types.ts
 │  │  │  └─ transaction
-│  │  │     ├─ core
 │  │  │     ├─ dto
 │  │  │     │  ├─ create-transaction.dto.ts
 │  │  │     │  └─ update-transaction.dto.ts
@@ -180,6 +186,7 @@ crypto
 │  ├─ tsconfig.json
 │  ├─ tsconfig.node.json
 │  └─ vite.config.ts
-└─ info.md
+├─ info.md
+└─ README.md
 
 ```

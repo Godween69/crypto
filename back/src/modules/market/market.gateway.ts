@@ -1,70 +1,89 @@
-// back\src\modules\market\market.gateway.ts
+// back/src/modules/market/market.gateway.ts
 
 import {
   WebSocketGateway,
   WebSocketServer,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger } from '@nestjs/common';
+import { Logger, UseGuards } from '@nestjs/common';
+import { JwtWsGuard } from '../auth/guards/jwt-ws.guard';
+import { Public } from '../auth/decorators/public.decorator';
 
-@WebSocketGateway({ cors: { origin: '*' }, namespace: 'market' })
+@WebSocketGateway({
+  cors: { origin: '*', credentials: true },
+  namespace: 'market',
+})
+// Важно: @Public() НЕ делает endpoint открытым для всех. Он лишь отключает глобальный HTTP-Guard. Безопасность обеспечивается вторым уровнем.
+@Public() // Пропускаем глобальный HTTP JwtAuthGuard для WS-handshake
+// Срабатывает ПОСЛЕ установки WS-соединения
+@UseGuards(JwtWsGuard) // Проверяем токен из cookie/auth.token при подключении
 export class MarketGateway implements OnGatewayConnection, OnGatewayDisconnect {
-  @WebSocketServer() server!: Server; // NestJS инициализирует после подъёма адаптера
+  @WebSocketServer() server!: Server;
   private readonly logger = new Logger(MarketGateway.name);
-  private activeConnections = 0; // счётчик живых WS-соединений
+  private activeConnections = 0;
 
-  // вынес интервал в константу, чтобы синхронизировать с CronExpression.EVERY_5_MINUTES
-  // и избежать магического числа 300_000 в разных местах кода
+  // Константа для синхронизации с CronExpression.EVERY_5_MINUTES
   private readonly WS_INTERVAL_MS = 5 * 60 * 1000;
+  private nextUpdateAt = Date.now() + this.WS_INTERVAL_MS;
 
-  private nextUpdateAt = Date.now() + 5 * 60 * 1000; // метка следующего обновления
-
-  handleConnection(client: Socket) {
-    this.activeConnections++; // фиксируем новое подключение
+  handleConnection(@ConnectedSocket() client: Socket) {
+    this.activeConnections++;
+    const user = (client.data as any).user;
     this.logger.log(
-      `WS подключён: ${client.id} (активных: ${this.activeConnections})`,
+      `WS подключён: ${client.id} userId=${user?.id} (активных: ${this.activeConnections})`,
     );
 
-    // если nextUpdateAt устарела (например, сервер работал без клиентов и крон не
-    // вызывал setNextUpdateAt), вычисляем следующую 5-минутную границу.
-    // Это предотвращает отправку клиенту "мусорной" метки из прошлого, из-за которой
-    // индикатор на фронте сразу показывал "—" вместо обратного отсчёта.
+    // Пересчёт устаревшей метки до ближайшего 5-мин слота
     if (this.nextUpdateAt <= Date.now()) {
       this.nextUpdateAt =
         Math.ceil(Date.now() / this.WS_INTERVAL_MS) * this.WS_INTERVAL_MS;
       this.logger.debug(
-        `Устаревшая метка пересчитана до ближайшего 5-мин слота`,
+        'Устаревшая метка пересчитана до ближайшего 5-мин слота',
       );
     }
 
-    client.emit('market:ttl_sync', { nextUpdateAt: this.nextUpdateAt }); // отправляем метку при входе
+    // Отправляем TTL-метку при входе
+    client.emit('market:ttl_sync', { nextUpdateAt: this.nextUpdateAt });
+
+    // Подписываем на персональный room для событий портфеля
+    client.join(`user:${user.id}`);
+    // Общий канал для рыночных цен
+    client.join('market:global');
   }
 
-  handleDisconnect(client: Socket) {
-    this.activeConnections = Math.max(0, this.activeConnections - 1); // безопасно уменьшаем счётчик
+  handleDisconnect(@ConnectedSocket() client: Socket) {
+    this.activeConnections = Math.max(0, this.activeConnections - 1);
+    const user = (client.data as any)?.user;
     this.logger.log(
-      `WS отключён: ${client.id} (активных: ${this.activeConnections})`,
+      `WS отключён: ${client.id} userId=${user?.id} (активных: ${this.activeConnections})`,
     );
   }
 
   hasActiveClients(): boolean {
-    return this.activeConnections > 0; // возвращаем true только при наличии живых сокетов
+    return this.activeConnections > 0;
   }
 
   setNextUpdateAt(timestamp: number) {
-    this.nextUpdateAt = timestamp; // обновляем метку после успешного крона
+    this.nextUpdateAt = timestamp;
   }
 
+  // Broadcast рыночных цен всем подключённым клиентам
   broadcastUpdate(data: unknown, nextUpdateAt: number) {
     this.logger.debug(
       `Broadcast market:sync → ${this.activeConnections} клиентам, nextUpdateAt=${new Date(nextUpdateAt).toISOString()}`,
     );
-    this.server.emit('market:sync', {
+    this.server.to('market:global').emit('market:sync', {
       type: 'cache_updated',
       nextUpdateAt,
       data,
-    }); // пушим всем вкладкам
+    });
+  }
+
+  // Персональное уведомление о пересчёте портфеля конкретного пользователя
+  broadcastPortfolioRebuilt(userId: string) {
+    this.server.to(`user:${userId}`).emit('portfolio:rebuilt');
   }
 }
