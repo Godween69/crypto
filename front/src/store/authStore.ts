@@ -16,15 +16,23 @@ interface AuthState {
   user: User | null;
 
   checkAuth: () => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
+  login: (
+    email: string,
+    password: string,
+    rememberMe?: boolean,
+  ) => Promise<void>;
   register: (
     email: string,
     password: string,
     displayName: string,
   ) => Promise<void>;
   logout: () => Promise<void>;
+  // Новые методы для сброса пароля
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (token: string, password: string) => Promise<void>;
 }
 
+// Безопасное извлечение сообщения и формирование корректной причины типа Error
 function extractErrorInfo(
   err: unknown,
   fallback: string,
@@ -80,10 +88,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  login: async (email: string, password: string) => {
-    console.log(`[AuthStore] Попытка входа: ${email}`);
+  login: async (email: string, password: string, rememberMe = false) => {
+    console.log(`[AuthStore] Попытка входа: ${email}, remember: ${rememberMe}`);
     try {
-      await api.post("/auth/login", { email, password });
+      await api.post("/auth/login", { email, password, rememberMe });
       const meResponse = await api.get<{ id: string; email: string }>(
         "/auth/me",
       );
@@ -95,7 +103,6 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: { id, email: confirmedEmail },
       });
     } catch (err: unknown) {
-      // Используем extractErrorInfo напрямую — он уже возвращает cause: Error
       const { message } = extractErrorInfo(err, "Неверный email или пароль");
       console.error(`[AuthStore] Ошибка входа: ${message}`);
     }
@@ -105,7 +112,6 @@ export const useAuthStore = create<AuthState>((set) => ({
     console.log(`[AuthStore] Попытка регистрации: ${email}`);
     try {
       await api.post("/auth/register", { email, password, displayName });
-      // После регистрации тоже запрашиваем /auth/me, чтобы получить ID
       const meResponse = await api.get<{ id: string; email: string }>(
         "/auth/me",
       );
@@ -121,7 +127,6 @@ export const useAuthStore = create<AuthState>((set) => ({
         },
       });
     } catch (err: unknown) {
-      // Используем extractErrorInfo напрямую — он уже возвращает cause: Error
       const { message } = extractErrorInfo(err, "Ошибка регистрации");
       console.error(`[AuthStore] Ошибка регистрации: ${message}`);
     }
@@ -144,6 +149,33 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ isAuthenticated: false, user: null, isLoading: false });
       console.log("[AuthStore] Состояние сброшено, редирект на /login");
       window.location.href = "/login";
+    }
+  },
+
+  // Запрос сброса пароля
+  forgotPassword: async (email: string) => {
+    console.log(`[AuthStore] Запрос сброса пароля для: ${email}`);
+    try {
+      await api.post("/auth/forgot-password", { email });
+      console.log(`[AuthStore] Запрос сброса пароля отправлен`);
+    } catch (err: unknown) {
+      const { message } = extractErrorInfo(err, "Ошибка отправки");
+      console.error(`[AuthStore] Ошибка forgotPassword: ${message}`);
+    }
+  },
+
+  // Сброс пароля по токену
+  resetPassword: async (token: string, password: string) => {
+    console.log(`[AuthStore] Сброс пароля по токену`);
+    try {
+      await api.post("/auth/reset-password", { token, password });
+      console.log(`[AuthStore] Пароль успешно сброшен`);
+    } catch (err: unknown) {
+      const { message } = extractErrorInfo(
+        err,
+        "Токен недействителен или истёк",
+      );
+      console.error(`[AuthStore] Ошибка resetPassword: ${message}`);
     }
   },
 }));

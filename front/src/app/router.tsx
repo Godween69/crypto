@@ -10,8 +10,10 @@ import { PortfolioPage } from '../pages/PortfolioPage/PortfolioPage';
 import { TransactionPage } from '../pages/TransactionsPage/TransactionsPage';
 import { AnalyticsPage } from '../pages/AnalyticsPage/AnalyticsPage';
 import { ErrorPage } from '../pages/ErrorPage/ErrorPage';
-import { LoginPage } from '../pages/LoginPage';
-import { RegisterPage } from '../pages/RegisterPage';
+import { LoginPage } from '../pages/Auth/LoginPage';
+import { RegisterPage } from '../pages/Auth/RegisterPage';
+import { ForgotPasswordPage } from "../pages/Auth/ForgotPasswordPage";
+import { ResetPasswordPage } from "../pages/Auth/ResetPasswordPage";
 
 // Компонент защиты
 import { ProtectedRoute } from '../components/ProtectedRoute';
@@ -39,5 +41,13 @@ export const router = createBrowserRouter([
   {
     path: '/register',
     element: <RegisterPage />,
+  },
+  {
+    path: "/forgot-password",
+    element: <ForgotPasswordPage />,
+  },
+  {
+    path: "/reset-password",
+    element: <ResetPasswordPage />,
   },
 ]);

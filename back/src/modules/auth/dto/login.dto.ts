@@ -1,17 +1,17 @@
 // back/src/modules/auth/dto/login.dto.ts
 
-import { IsEmail, IsString, MinLength, IsOptional } from 'class-validator';
+import { IsBoolean, IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class LoginDto {
   @IsEmail({}, { message: 'Некорректный email' })
   email!: string;
 
   @IsString()
-  @MinLength(8)
+  @IsNotEmpty({ message: 'Пароль обязателен' })
   password!: string;
 
-  // Fingerprint браузера для защиты от кражи refresh-токена
+  // Remember me: увеличивает TTL refresh cookie с 30 дней до 365 дней
+  @IsBoolean()
   @IsOptional()
-  @IsString()
-  fingerprint?: string;
+  rememberMe?: boolean;
 }

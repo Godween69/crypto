@@ -34,16 +34,33 @@ crypto
 │  │  │  └─ prisma
 │  │  │     ├─ prisma.module.ts
 │  │  │     └─ prisma.service.ts
-│  │  ├─ config
-│  │  │  ├─ app.config.ts
-│  │  │  └─ env.ts
-│  │  ├─ guards
-│  │  ├─ interceptors
 │  │  ├─ main.ts
 │  │  ├─ modules
 │  │  │  ├─ auth
-│  │  │  │  └─ middleware
-│  │  │  │     └─ user-context.middleware.ts
+│  │  │  │  ├─ auth.controller.ts
+│  │  │  │  ├─ auth.module.ts
+│  │  │  │  ├─ auth.service.ts
+│  │  │  │  ├─ decorators
+│  │  │  │  │  ├─ current-user.decorator.ts
+│  │  │  │  │  └─ public.decorator.ts
+│  │  │  │  ├─ dto
+│  │  │  │  │  ├─ forgot-password.dto.ts
+│  │  │  │  │  ├─ login.dto.ts
+│  │  │  │  │  ├─ register.dto.ts
+│  │  │  │  │  └─ reset-password.dto.ts
+│  │  │  │  ├─ guards
+│  │  │  │  │  ├─ jwt-auth.guard.ts
+│  │  │  │  │  └─ jwt-ws.guard.ts
+│  │  │  │  ├─ info.md
+│  │  │  │  ├─ interceptors
+│  │  │  │  │  └─ user-context.interceptor.ts
+│  │  │  │  ├─ middleware
+│  │  │  │  │  └─ user-context.middleware.ts
+│  │  │  │  └─ strategies
+│  │  │  │     └─ jwt.strategy.ts
+│  │  │  ├─ email
+│  │  │  │  ├─ email.module.ts
+│  │  │  │  └─ email.service.ts
 │  │  │  ├─ market
 │  │  │  │  ├─ coin-resolver.service.ts
 │  │  │  │  ├─ coin.repository.ts
@@ -65,6 +82,7 @@ crypto
 │  │  │  └─ transaction
 │  │  │     ├─ dto
 │  │  │     │  ├─ create-transaction.dto.ts
+│  │  │     │  ├─ transaction-response.dto.ts
 │  │  │     │  └─ update-transaction.dto.ts
 │  │  │     ├─ mappers
 │  │  │     │  └─ transaction.mapper.ts
@@ -80,7 +98,6 @@ crypto
 │  ├─ tsconfig.build.json
 │  └─ tsconfig.json
 ├─ front
-│  ├─ Dockerfile
 │  ├─ eslint.config.js
 │  ├─ index.html
 │  ├─ package-lock.json
@@ -113,6 +130,13 @@ crypto
 │  │  │  │     ├─ info.md
 │  │  │  │     ├─ PortfolioIndexChart.css
 │  │  │  │     └─ PortfolioIndexChart.tsx
+│  │  │  ├─ Auth
+│  │  │  │  ├─ Auth.css
+│  │  │  │  ├─ AuthHero.tsx
+│  │  │  │  ├─ AuthLayout.tsx
+│  │  │  │  ├─ FormField.tsx
+│  │  │  │  ├─ OAuthButtons.tsx
+│  │  │  │  └─ PasswordInput.tsx
 │  │  │  ├─ MarketRefreshIndicator
 │  │  │  │  ├─ CircularTtlIndicator.css
 │  │  │  │  ├─ CircularTtlIndicator.tsx
@@ -138,6 +162,7 @@ crypto
 │  │  │  │     ├─ info.md
 │  │  │  │     ├─ PortfolioSummary.css
 │  │  │  │     └─ PortfolioSummary.tsx
+│  │  │  ├─ ProtectedRoute.tsx
 │  │  │  └─ TransactionForm
 │  │  │     ├─ AmountField.tsx
 │  │  │     ├─ info.md
@@ -154,7 +179,9 @@ crypto
 │  │  │  ├─ useMarketData.ts
 │  │  │  ├─ useMarketSocket.ts
 │  │  │  ├─ useModal.ts
+│  │  │  ├─ usePasswordStrength.ts
 │  │  │  ├─ usePortfolio.ts
+│  │  │  ├─ useProtectedRoute.ts
 │  │  │  ├─ useTransactions.ts
 │  │  │  └─ useUpdateTransaction.ts
 │  │  ├─ index.css
@@ -166,21 +193,33 @@ crypto
 │  │  │  ├─ AnalyticsPage
 │  │  │  │  ├─ AnalyticsPage.css
 │  │  │  │  └─ AnalyticsPage.tsx
+│  │  │  ├─ Auth
+│  │  │  │  ├─ ForgotPasswordPage.tsx
+│  │  │  │  ├─ LoginPage.tsx
+│  │  │  │  ├─ RegisterPage.tsx
+│  │  │  │  └─ ResetPasswordPage.tsx
 │  │  │  ├─ ErrorPage
 │  │  │  │  ├─ ErrorPage.css
 │  │  │  │  └─ ErrorPage.tsx
+│  │  │  ├─ LoginPage
+│  │  │  │  └─ index.tsx
 │  │  │  ├─ PortfolioPage
 │  │  │  │  ├─ PortfolioPage.css
 │  │  │  │  └─ PortfolioPage.tsx
+│  │  │  ├─ RegisterPage
+│  │  │  │  └─ index.tsx
 │  │  │  └─ TransactionsPage
 │  │  │     ├─ TransactionsPage.css
 │  │  │     └─ TransactionsPage.tsx
 │  │  ├─ providers
 │  │  │  └─ QueryProvider.tsx
+│  │  ├─ store
+│  │  │  └─ authStore.ts
 │  │  ├─ types
 │  │  │  ├─ portfolio.types.ts
 │  │  │  └─ transaction.types.ts
 │  │  └─ utils
+│  │     ├─ auth.schemas.ts
 │  │     └─ formatCoinName.ts
 │  ├─ tsconfig.app.json
 │  ├─ tsconfig.json

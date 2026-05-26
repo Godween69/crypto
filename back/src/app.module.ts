@@ -13,6 +13,7 @@ import { RedisModule } from './redis/redis.module';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserContextInterceptor } from './modules/auth/interceptors/user-context.interceptor';
+import { EmailModule } from './modules/email/email.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { UserContextInterceptor } from './modules/auth/interceptors/user-context
     PortfolioModule,
     MarketModule,
     RedisModule,
+    EmailModule,
   ],
   providers: [
     // Интерцептор выполняется ПОСЛЕ Guards, когда req.user уже есть

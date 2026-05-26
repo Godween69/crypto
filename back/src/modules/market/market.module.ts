@@ -19,6 +19,6 @@ import { MarketGateway } from './market.gateway';
     CoinRepository,
     MarketGateway,
   ],
-  exports: [MarketService],
+  exports: [MarketService, MarketGateway],
 })
 export class MarketModule {}

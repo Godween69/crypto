@@ -5,6 +5,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { MarketService } from '../modules/market/market.service';
+import { MarketGateway } from '../modules/market/market.gateway'; // <-- ИМПОРТ WS-гейтвея
 import { RedisService } from '../redis/redis.service';
 
 @Injectable()
@@ -21,6 +22,7 @@ export class PortfolioSnapshotService {
     private readonly market: MarketService,
     private readonly redis: RedisService,
     private readonly cls: ClsService,
+    private readonly marketGateway: MarketGateway, // <-- ИНЖЕКТ WS-гейтвея для уведомлений фронта
   ) {}
 
   // Полная пересборка истории для ВСЕХ пользователей с транзакциями
@@ -87,6 +89,9 @@ export class PortfolioSnapshotService {
             where: { granularity: '1h', userId },
           });
         });
+
+        // Уведомляем фронтенд, что портфель изменился (даже если он теперь пустой)
+        this.marketGateway.broadcastPortfolioRebuilt(userId);
         return;
       }
 
@@ -189,6 +194,10 @@ export class PortfolioSnapshotService {
         this.logger.log(
           `[Snapshot:RebuildUser] Rebuilt успешно: userId=${userId}, точек=${snapshots.length}`,
         );
+
+        // 🔥 УВЕДОМЛЕНИЕ ФРОНТЕНДА: отправляем персональное событие portfolio:rebuilt
+        // Фронтенд слушает это событие через useMarketSocket и инвалидирует кэш графика
+        this.marketGateway.broadcastPortfolioRebuilt(userId);
       } catch (err: unknown) {
         if (err instanceof Error) {
           this.logger.error(
@@ -315,6 +324,9 @@ export class PortfolioSnapshotService {
           this.logger.log(
             `[Snapshot:Append] Точка добавлена: userId=${userId}, $${rounded}`,
           );
+
+          // 🔥 УВЕДОМЛЕНИЕ ФРОНТЕНДА: новая точка снапшота — фронт обновит график
+          this.marketGateway.broadcastPortfolioRebuilt(userId);
         } catch (err: unknown) {
           if (err instanceof Error) {
             this.logger.error(
@@ -385,6 +397,9 @@ export class PortfolioSnapshotService {
       this.logger.log(
         `[Snapshot:Rollup] ${source}→${target}: $${latest.totalValue} для userId=${latest.userId}`,
       );
+
+      // 🔥 УВЕДОМЛЕНИЕ ФРОНТЕНДА: агрегированный снапшот создан — фронт обновит долгосрочный график
+      this.marketGateway.broadcastPortfolioRebuilt(latest.userId);
     });
   }
 
