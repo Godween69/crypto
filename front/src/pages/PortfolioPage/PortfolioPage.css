@@ -31,7 +31,7 @@
   width: 100%; /* 🔥 Изменено с 80% для выравнивания */
   max-width: 900px;
   margin: 0 auto;
-  padding-top: 230px;
+  padding-top: 260px;
   padding-bottom: 50px;
   
   z-index: 1; /* 🔥 Список под виджетом */

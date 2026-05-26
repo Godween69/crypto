@@ -31,6 +31,11 @@
   letter-spacing: -0.5px;
 }
 
+.ps-totalInvested {
+font-weight: 600;
+font-size: 17px;
+}
+
 .ps-secondary .ps-pill {
   display: inline-flex;
   align-items: center;

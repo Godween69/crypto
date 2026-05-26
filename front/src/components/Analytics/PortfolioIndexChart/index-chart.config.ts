@@ -61,7 +61,7 @@ export const INDEX_CHART_CONFIG = {
     type: "log" as const, // логарифмическая шкала для корректного отображения относительной динамики
     logBase: 10,
     axisLine: { show: false },
-    axisTick: { show: false },
+    axisTick: { show: true },
     splitLine: { lineStyle: { type: "dashed" as const, color: "#334155" } },
     axisLabel: {
       color: "#94a3b8",
