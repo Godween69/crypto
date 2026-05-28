@@ -38,20 +38,42 @@ export class AuthController {
     return { id: user.id, email: user.email };
   }
 
+  // Регистрация: больше НЕ устанавливает куки и НЕ возвращает токены
   @Public()
   @Post('register')
-  async register(
-    @Body() dto: RegisterDto,
+  async register(@Body() dto: RegisterDto, @Req() req: Request) {
+    this.logger.log(`[AuthController] Начало регистрации: ${dto.email}`);
+    const result = await this.auth.register(dto, this.extractMeta(req));
+    this.logger.log(`[AuthController] Регистрация завершена: ${dto.email}`);
+    return result; // Возвращает { message: "..." }
+  }
+
+  // Подтверждение email: устанавливает куки и логинит пользователя
+  @Public()
+  @Post('verify-email')
+  async verifyEmail(
+    @Body() body: { token: string },
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    this.logger.log(`[AuthController] Начало регистрации: ${dto.email}`);
-    const tokens = await this.auth.register(dto, this.extractMeta(req));
-    this.setCookieTokens(res, tokens, false); // при регистрации rememberMe = false
-    this.logger.log(
-      `[AuthController] Куки установлены для регистрации: ${dto.email}`,
+    this.logger.log(`[AuthController] Подтверждение email по токену`);
+    const tokens = await this.auth.verifyEmail(
+      body.token,
+      this.extractMeta(req),
     );
-    return { user: { email: dto.email, displayName: dto.displayName } };
+    this.setCookieTokens(res, tokens, false);
+    this.logger.log(`[AuthController] Email подтверждён, куки установлены`);
+    return { ok: true, message: 'Email успешно подтверждён' };
+  }
+
+  // Повторная отправка письма верификации
+  @Public()
+  @Post('resend-verification')
+  async resendVerification(@Body() body: { email: string }) {
+    this.logger.log(
+      `[AuthController] Запрос повторной верификации для: ${body.email}`,
+    );
+    return this.auth.resendVerification(body.email);
   }
 
   @Public()
@@ -86,8 +108,6 @@ export class AuthController {
     this.logger.log(`[AuthController] Обновление токенов`);
     const tokens = await this.auth.refresh(oldRefresh, this.extractMeta(req));
 
-    // При refresh сохраняем rememberMe из оригинальной сессии
-    // Определяем по expiresAt: если > 60 дней — rememberMe был true
     const daysUntilExpiry =
       (tokens.expiresAt - Date.now()) / (1000 * 60 * 60 * 24);
     const rememberMe = daysUntilExpiry > 60;
@@ -99,14 +119,12 @@ export class AuthController {
     return { ok: true };
   }
 
-  // Forgot password: всегда возвращаем 200, даже если email не найден
   @Public()
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     this.logger.log(`[AuthController] Запрос сброса пароля для: ${dto.email}`);
     await this.auth.forgotPassword(dto.email);
-    // Единый ответ для защиты от enumeration
     return {
       ok: true,
       message:
@@ -114,7 +132,6 @@ export class AuthController {
     };
   }
 
-  // Reset password: принимает токен из URL и новый пароль
   @Public()
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
@@ -158,7 +175,6 @@ export class AuthController {
     };
   }
 
-  // Установка кук с учётом rememberMe
   private setCookieTokens(
     res: Response,
     tokens: { accessToken: string; refreshToken: string },
@@ -167,17 +183,15 @@ export class AuthController {
     const isProd = process.env.NODE_ENV === 'production';
     const base = { httpOnly: true, secure: isProd, sameSite: 'lax' as const };
 
-    // Access token всегда 15 минут
     res.cookie('access_token', tokens.accessToken, {
       ...base,
       maxAge: 15 * 60 * 1000,
       path: '/',
     });
 
-    // Refresh token: 30 дней по умолчанию, 365 дней если rememberMe
     const refreshMaxAge = rememberMe
-      ? 365 * 24 * 60 * 60 * 1000 // 365 дней
-      : 30 * 24 * 60 * 60 * 1000; // 30 дней
+      ? 365 * 24 * 60 * 60 * 1000
+      : 30 * 24 * 60 * 60 * 1000;
 
     res.cookie('refresh_token', tokens.refreshToken, {
       ...base,

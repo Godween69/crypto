@@ -4,11 +4,11 @@ import { Module } from '@nestjs/common';
 import { PortfolioController } from './portfolio.controller';
 import { PortfolioService } from './portfolio.service';
 import { MarketModule } from '../market/market.module';
-import { PrismaModule } from '../../common/prisma/prisma.module';
+// import { PrismaModule } from '../../common/prisma/prisma.module';
 
 @Module({
   imports: [
-    PrismaModule, // Делает PrismaService доступным для внедрения
+    // PrismaModule, теперь глобальный
     MarketModule, // Делает MarketService доступным для внедрения
   ],
   controllers: [PortfolioController],

@@ -165,4 +165,59 @@ export class EmailService implements OnModuleInit {
 </html>
     `.trim();
   }
+  // Отправка письма для подтверждения email
+  async sendEmailVerification(email: string, token: string): Promise<void> {
+    const frontendUrl = this.config.get<string>(
+      'FRONTEND_URL',
+      'http://localhost:5173',
+    );
+    const verifyLink = `${frontendUrl}/verify-email?token=${token}`;
+    const from = this.config.get<string>(
+      'RESEND_FROM',
+      'CryptoFolio <noreply@dvbstudio.online>',
+    );
+
+    const html = `
+<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Подтверждение email</title></head>
+<body style="margin:0;padding:0;background:#0a0a0f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#fff;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0f;padding:40px 20px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#13131a;border:1px solid rgba(255,255,255,0.06);border-radius:16px;overflow:hidden;">
+        <tr><td style="padding:40px 40px 20px;text-align:center;">
+          <div style="display:inline-block;width:48px;height:48px;background:linear-gradient(135deg,#d4af37,#f4e5a1);border-radius:12px;line-height:48px;font-size:24px;font-weight:700;color:#0a0a0f;">₿</div>
+          <h1 style="margin:20px 0 0;font-size:24px;font-weight:600;letter-spacing:-0.02em;">CryptoFolio</h1>
+        </td></tr>
+        <tr><td style="padding:20px 40px;">
+          <h2 style="margin:0 0 16px;font-size:20px;font-weight:600;">Подтвердите ваш email</h2>
+          <p style="margin:0 0 16px;color:#9ca3af;font-size:15px;line-height:1.6;">
+            Вы зарегистрировались в CryptoFolio. Нажмите кнопку ниже, чтобы подтвердить адрес <strong style="color:#fff;">${email}</strong>.
+          </p>
+          <p style="margin:0 0 24px;color:#9ca3af;font-size:15px;line-height:1.6;">
+            Ссылка действительна в течение <strong style="color:#fff;">24 часов</strong>.
+          </p>
+          <div style="text-align:center;margin:32px 0;">
+            <a href="${verifyLink}" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#d4af37,#e6c454);color:#0a0a0f;text-decoration:none;border-radius:10px;font-weight:600;font-size:15px;">
+              Подтвердить email
+            </a>
+          </div>
+          <p style="margin:0 0 8px;color:#9ca3af;font-size:13px;line-height:1.5;">Если кнопка не работает, скопируйте ссылку:</p>
+          <p style="margin:0;word-break:break-all;color:#d4af37;font-size:12px;line-height:1.5;">${verifyLink}</p>
+        </td></tr>
+        <tr><td style="padding:24px 40px 40px;border-top:1px solid rgba(255,255,255,0.06);">
+          <p style="margin:0;color:#6b7280;font-size:12px;">© ${new Date().getFullYear()} CryptoFolio. Все права защищены.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`.trim();
+
+    await this.send({
+      to: email,
+      subject: 'Подтверждение email — CryptoFolio',
+      html,
+      from,
+    });
+  }
 }

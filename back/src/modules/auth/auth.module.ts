@@ -9,13 +9,12 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { PrismaModule } from '../../common/prisma/prisma.module';
+import { RolesGuard } from './guards/roles.guard'; // <-- Импорт Guard для проверки ролей
 import { RedisModule } from '../../redis/redis.module';
 
 @Module({
   imports: [
     RedisModule,
-    PrismaModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -30,9 +29,9 @@ import { RedisModule } from '../../redis/redis.module';
   providers: [
     AuthService,
     JwtStrategy,
-    // Глобальный Guard: по умолчанию все маршруты защищены JWT
-    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    RolesGuard, // <-- Регистрируем Guard в DI-контейнере
+    { provide: APP_GUARD, useClass: JwtAuthGuard }, // Глобальная JWT-защита
   ],
-  exports: [AuthService, JwtModule],
+  exports: [AuthService, JwtModule, RolesGuard], // <-- Экспортируем для использования в других модулях
 })
 export class AuthModule {}

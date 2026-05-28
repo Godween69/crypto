@@ -1,5 +1,6 @@
 // npx prisma migrate dev --name описание
-// npx prisma migrate reset - удаляет ВСЕ таблицы
+// npx prisma migrate reset --force - удаляет ВСЕ таблицы
+
 // npx prisma generate - пересобирает Prisma Client
 
 // npx prisma studio -  запускает веб-интерфейс
@@ -16,18 +17,27 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Роли пользователей: расширяемый enum для RBAC
+enum Role {
+  USER
+  ADMIN
+  // В будущем: MODERATOR, SUPPORT, API_CLIENT
+}
+
 // Модель пользователя — ядро изоляции данных
 model User {
   id           String   @id @default(cuid()) // используем cuid для консистентности с Transaction
   email        String   @unique // уникальный идентификатор для входа
   passwordHash String   @map("password_hash") // хэш bcrypt, никогда не храните plain
   displayName  String?  @map("display_name") // опциональное имя для UI
+  emailVerified Boolean @default(false) @map("email_verified") // Флаг верификации
+    role          Role     @default(USER) //  роль
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   transactions       Transaction[] // связь один-ко-многим с транзакциями
   sessions           RefreshSession[] // активные refresh-сессии для управления устройствами
-  portfolioSnapshots PortfolioSnapshot[]
+  portfolioSnapshots PortfolioSnapshot[] // снимки баланса
 
   @@map("users")
 }

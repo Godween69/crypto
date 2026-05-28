@@ -14,6 +14,7 @@ import { LoginPage } from '../pages/Auth/LoginPage';
 import { RegisterPage } from '../pages/Auth/RegisterPage';
 import { ForgotPasswordPage } from "../pages/Auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "../pages/Auth/ResetPasswordPage";
+import { VerifyEmailPage } from "../pages/Auth/VerifyEmailPage"; // <-- ДОБАВЛЕН ИМПОРТ
 
 // Компонент защиты
 import { ProtectedRoute } from '../components/ProtectedRoute';
@@ -34,20 +35,9 @@ export const router = createBrowserRouter([
       { path: 'analytics', element: <AnalyticsPage /> },
     ],
   },
-  {
-    path: '/login',
-    element: <LoginPage />,
-  },
-  {
-    path: '/register',
-    element: <RegisterPage />,
-  },
-  {
-    path: "/forgot-password",
-    element: <ForgotPasswordPage />,
-  },
-  {
-    path: "/reset-password",
-    element: <ResetPasswordPage />,
-  },
+  { path: '/login', element: <LoginPage /> },
+  { path: '/register', element: <RegisterPage /> },
+  { path: "/forgot-password", element: <ForgotPasswordPage /> },
+  { path: "/reset-password", element: <ResetPasswordPage /> },
+  { path: "/verify-email", element: <VerifyEmailPage /> }, 
 ]);
