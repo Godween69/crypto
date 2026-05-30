@@ -37,7 +37,7 @@ export const AuthLayout = ({ children, title, subtitle }: AuthLayoutProps) => {
         </motion.div>
 
         <p className="auth-layout__footer">
-          © {new Date().getFullYear()} CryptoFolio. Все права защищены.
+          © {new Date().getFullYear()} CoinVue. Все права защищены.
         </p>
       </div>
     </div>

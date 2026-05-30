@@ -8,9 +8,9 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, UseGuards } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { JwtWsGuard } from '../auth/guards/jwt-ws.guard';
+import { JwtService } from '@nestjs/jwt';
 import { Public } from '../auth/decorators/public.decorator';
 
 interface ConnectedUser {
@@ -21,90 +21,112 @@ interface ConnectedUser {
 }
 
 @WebSocketGateway({
-  cors: { origin: '*', credentials: true },
+  cors: {
+    // КРИТИЧНО: при credentials: true origin не может быть '*'
+    // Браузер вырежет куки, если origin не совпадает с фронтендом
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    credentials: true,
+  },
   namespace: 'market',
 })
 @Public()
-@UseGuards(JwtWsGuard)
+// @UseGuards(JwtWsGuard) УДАЛЁН: Guard не работает для handleConnection в NestJS
 export class MarketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server!: Server;
   private readonly logger = new Logger(MarketGateway.name);
 
-  // Мапа активных подключений
+  // Мапа активных подключений: socketId -> ConnectedUser
   private connections = new Map<string, ConnectedUser>();
 
   private readonly WS_INTERVAL_MS = 5 * 60 * 1000;
   private nextUpdateAt = Date.now() + this.WS_INTERVAL_MS;
 
-  handleConnection(@ConnectedSocket() client: Socket) {
-    const user = (client.data as any)?.user;
+  // Инжектим JwtService напрямую для верификации при handshake
+  constructor(private readonly jwtService: JwtService) {}
 
-    // Если Guard пропустил без user — закрываем ТИХО (debug вместо warn)
-    // Это ожидаемое поведение при race condition с Set-Cookie
-    if (!user || !user.id) {
+  // Аутентификация происходит здесь, так как Guards не запускаются на подключение
+  async handleConnection(@ConnectedSocket() client: Socket) {
+    try {
+      // 1. Извлекаем токен из cookie или auth.payload
+      const cookieHeader = client.handshake.headers.cookie ?? '';
+      let token = client.handshake.auth?.token as string | undefined;
+
+      if (!token) {
+        const match = cookieHeader.match(/access_token=([^;]+)/);
+        token = match?.[1];
+      }
+
+      if (!token) {
+        this.logger.debug(
+          `[WS] ❌ Токен отсутствует в handshake, clientId=${client.id}`,
+        );
+        client.disconnect(true);
+        return;
+      }
+
+      // 2. Верифицируем JWT асинхронно
+      const payload = await this.jwtService.verifyAsync(token);
+      const user = {
+        id: payload.sub,
+        email: payload.email,
+        role: payload.role,
+      };
+
+      // 3. Сохраняем пользователя в client.data для будущих @SubscribeMessage
+      client.data.user = user;
+
+      // 4. Регистрируем подключение в локальной мапе
+      this.connections.set(client.id, {
+        socketId: client.id,
+        userId: user.id,
+        email: user.email,
+        connectedAt: new Date(),
+      });
+
+      this.logger.log(
+        `[WS] ✅ Подключён: ${client.id} | userId=${user.id} | email=${user.email} | активных: ${this.connections.size}`,
+      );
+
+      // Синхронизация TTL при входе
+      if (this.nextUpdateAt <= Date.now()) {
+        this.nextUpdateAt =
+          Math.ceil(Date.now() / this.WS_INTERVAL_MS) * this.WS_INTERVAL_MS;
+      }
+      client.emit('market:ttl_sync', { nextUpdateAt: this.nextUpdateAt });
+
+      // Подписка на персональный и глобальный каналы
+      client.join(`user:${user.id}`);
+      client.join('market:global');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown auth error';
       this.logger.debug(
-        `[WS] Подключение отклонено: нет пользователя (clientId=${client.id}). Ожидается при race condition с cookies.`,
+        `[WS] ❌ Ошибка авторизации: ${msg}, clientId=${client.id}`,
       );
       client.disconnect(true);
-      return;
     }
-
-    // Сохраняем подключение
-    this.connections.set(client.id, {
-      socketId: client.id,
-      userId: user.id,
-      email: user.email,
-      connectedAt: new Date(),
-    });
-
-    this.logger.log(
-      `[WS] ✅ Подключён: ${client.id} | userId=${user.id} | email=${user.email ?? 'N/A'} | активных: ${this.connections.size}`,
-    );
-
-    // Пересчёт TTL до ближайшего 5-мин слота
-    if (this.nextUpdateAt <= Date.now()) {
-      this.nextUpdateAt =
-        Math.ceil(Date.now() / this.WS_INTERVAL_MS) * this.WS_INTERVAL_MS;
-    }
-
-    // Отправляем TTL-метку при входе
-    client.emit('market:ttl_sync', { nextUpdateAt: this.nextUpdateAt });
-
-    // Подписываем на персональный room
-    client.join(`user:${user.id}`);
-    // Общий канал для рыночных цен
-    client.join('market:global');
   }
 
   handleDisconnect(@ConnectedSocket() client: Socket) {
-    const user = (client.data as any)?.user;
     const connected = this.connections.get(client.id);
-    const duration = connected
-      ? Math.round((Date.now() - connected.connectedAt.getTime()) / 1000)
-      : 0;
+    if (!connected) return; // Был отклонён на этапе авторизации
 
-    // Если пользователь не был в мапе — значит Guard отклонил подключение, логируем тихо
-    if (!connected) {
-      this.logger.debug(`[WS] Отключён без авторизации: ${client.id}`);
-      return;
-    }
-
+    const duration = Math.round(
+      (Date.now() - connected.connectedAt.getTime()) / 1000,
+    );
     this.connections.delete(client.id);
 
     this.logger.log(
-      `[WS] 🔌 Отключён: ${client.id} | userId=${user?.id ?? 'N/A'} | был в сети: ${duration}с | активных: ${this.connections.size}`,
+      `[WS] 🔌 Отключён: ${client.id} | userId=${connected.userId} | был в сети: ${duration}с | активных: ${this.connections.size}`,
     );
   }
 
-  // Cron каждую минуту: логируем активные подключения
+  // Cron каждую минуту: логирование активных подключений
   @Cron(CronExpression.EVERY_MINUTE)
   logActiveConnections() {
     if (this.connections.size === 0) return;
-
     const summary = Array.from(this.connections.values())
-      .map((c) => `${c.email ?? c.userId.substring(0, 8)}`)
+      .map((c) => c.email ?? c.userId.substring(0, 8))
       .join(', ');
-
     this.logger.log(
       `[WS] 📡 Активных подключений: ${this.connections.size} → [${summary}]`,
     );
@@ -112,10 +134,6 @@ export class MarketGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   getActiveConnectionsCount(): number {
     return this.connections.size;
-  }
-
-  getConnectionsDetails(): ConnectedUser[] {
-    return Array.from(this.connections.values());
   }
 
   hasActiveClients(): boolean {
@@ -129,7 +147,7 @@ export class MarketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // Broadcast рыночных цен всем клиентам
   broadcastUpdate(data: unknown, nextUpdateAt: number) {
     this.logger.debug(
-      `[WS] 📤 Broadcast market:sync → ${this.connections.size} клиентам, nextUpdateAt=${new Date(nextUpdateAt).toISOString()}`,
+      `[WS] 📤 Broadcast market:sync → ${this.connections.size} клиентам`,
     );
     this.server.to('market:global').emit('market:sync', {
       type: 'cache_updated',
@@ -138,9 +156,8 @@ export class MarketGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
-  // Персональное уведомление о пересчёте портфеля
+  // Персональное уведомление о пересчёте портфеля (безопасная проверка adapter)
   broadcastPortfolioRebuilt(userId: string) {
-    // Безопасная проверка: adapter/rooms могут быть undefined при вызове из крона/фона
     const rooms = this.server?.sockets?.adapter?.rooms;
     const roomSize = rooms?.get(`user:${userId}`)?.size ?? 0;
 
@@ -148,7 +165,6 @@ export class MarketGateway implements OnGatewayConnection, OnGatewayDisconnect {
       `[WS] 📊 Broadcast portfolio:rebuilt → userId=${userId} (${roomSize} подключений в room)`,
     );
 
-    // Отправляем событие только если есть активные подписчики
     if (roomSize > 0) {
       this.server.to(`user:${userId}`).emit('portfolio:rebuilt');
     }

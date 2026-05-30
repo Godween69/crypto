@@ -8,6 +8,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { YandexStrategy } from './strategies/yandex.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard'; // <-- Импорт Guard для проверки ролей
 import { RedisModule } from '../../redis/redis.module';
@@ -30,6 +31,7 @@ import { RedisModule } from '../../redis/redis.module';
     AuthService,
     JwtStrategy,
     RolesGuard, // <-- Регистрируем Guard в DI-контейнере
+    YandexStrategy,
     { provide: APP_GUARD, useClass: JwtAuthGuard }, // Глобальная JWT-защита
   ],
   exports: [AuthService, JwtModule, RolesGuard], // <-- Экспортируем для использования в других модулях

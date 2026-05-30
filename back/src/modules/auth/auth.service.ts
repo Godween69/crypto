@@ -8,7 +8,7 @@ TS-защита → if (!currentUser) гарантирует, что ниже cu
 Идемпотентность → если emailVerified === true, пропускаем мутации и сразу выдаём сессию.
 Крон-очистка → ежедневно в 03:00 удаляет записи, где emailVerified: false и createdAt < 24ч. Это предотвращает накопление мусора и освобождает email для повторной регистрации.*/
 
-import { Role } from '@prisma/client';
+import { Role, AuthProvider } from '@prisma/client';
 import {
   Injectable,
   UnauthorizedException,
@@ -16,6 +16,8 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+
+import type { YandexProfile } from 'passport-yandex';
 
 import { Cron } from '@nestjs/schedule';
 import { JwtService } from '@nestjs/jwt';
@@ -50,6 +52,65 @@ export class AuthService {
     private redis: RedisService,
     private email: EmailService,
   ) {}
+
+  // OAuth вход/регистрация через Яндекс
+  async yandexLogin(
+    profile: YandexProfile,
+    meta: { ip: string; fingerprint?: string },
+  ): Promise<TokenPair> {
+    this.logger.log(`[Auth:Yandex] Обработка профиля: yandexId=${profile.id}`);
+
+    // Извлекаем email: приоритет default_email → emails[0]
+    const email = profile._json?.default_email ?? profile.emails?.[0]?.value;
+    if (!email) {
+      this.logger.warn(
+        `[Auth:Yandex] Профиль не содержит email: yandexId=${profile.id}`,
+      );
+      throw new BadRequestException(
+        'Яндекс-аккаунт не предоставляет email. Разрешите доступ к почте.',
+      );
+    }
+
+    // Извлекаем имя для отображения
+    const displayName = profile.displayName || profile._json?.login || null;
+
+    // Ищем пользователя по yandexId или email
+    let user = await this.cls.run(async () => {
+      this.cls.set('bypassUserIdFilter', true);
+      return this.prisma.x.user.findFirst({
+        where: { OR: [{ yandexId: profile.id }, { email }] },
+      });
+    });
+
+    if (!user) {
+      // 🆕 Новый пользователь: создаём с подтверждённым email
+      // Яндекс уже верифицировал почту, поэтому emailVerified: true
+      user = await this.prisma.x.user.create({
+        data: {
+          email,
+          displayName,
+          yandexId: profile.id,
+          authProvider: AuthProvider.YANDEX,
+          emailVerified: true,
+          passwordHash: '', // OAuth-пользователи не используют пароль
+        },
+      });
+      this.logger.log(`[Auth:Yandex] Создан новый пользователь: ${email}`);
+    } else if (!user.yandexId) {
+      // 🔗 Существующий пользователь (через email/password): привязываем Яндекс
+      user = await this.prisma.x.user.update({
+        where: { id: user.id },
+        data: { yandexId: profile.id, authProvider: AuthProvider.YANDEX },
+      });
+      this.logger.log(`[Auth:Yandex] Яндекс привязан к аккаунту: ${email}`);
+    } else {
+      // ✅ Существующий OAuth-пользователь: просто вход
+      this.logger.log(`[Auth:Yandex] Вход через Яндекс: ${email}`);
+    }
+
+    // Выпускаем JWT-сессию (токены + куки)
+    return this.issueTokenPair(user, meta);
+  }
 
   // Регистрация БЕЗ авто-логина. Отправляем письмо верификации.
   async register(

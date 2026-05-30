@@ -24,7 +24,7 @@ export const AuthHero = () => {
       >
         <div className="auth-hero__logo">
           <div className="auth-hero__logo-mark">₿</div>
-          <span className="auth-hero__logo-text">CryptoFolio</span>
+          <span className="auth-hero__logo-text">CoinVue</span>
         </div>
 
         <h1 className="auth-hero__title">

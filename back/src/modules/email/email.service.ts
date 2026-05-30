@@ -46,14 +46,14 @@ export class EmailService implements OnModuleInit {
     const resetLink = `${frontendUrl}/reset-password?token=${token}`;
     const from = this.config.get<string>(
       'RESEND_FROM',
-      'CryptoFolio <noreply@dvbstudio.online>',
+      'CoinVue <noreply@dvbstudio.online>',
     );
 
     const html = this.buildResetPasswordHtml(resetLink);
 
     await this.send({
       to: email,
-      subject: 'Сброс пароля — CryptoFolio',
+      subject: 'Сброс пароля — CoinVue',
       html,
       from,
     });
@@ -119,14 +119,14 @@ export class EmailService implements OnModuleInit {
           <tr>
             <td style="padding:40px 40px 20px;text-align:center;">
               <div style="display:inline-block;width:48px;height:48px;background:linear-gradient(135deg,#d4af37,#f4e5a1);border-radius:12px;line-height:48px;font-size:24px;font-weight:700;color:#0a0a0f;">₿</div>
-              <h1 style="margin:20px 0 0;font-size:24px;font-weight:600;letter-spacing:-0.02em;">CryptoFolio</h1>
+              <h1 style="margin:20px 0 0;font-size:24px;font-weight:600;letter-spacing:-0.02em;">CoinVue</h1>
             </td>
           </tr>
           <tr>
             <td style="padding:20px 40px;">
               <h2 style="margin:0 0 16px;font-size:20px;font-weight:600;">Сброс пароля</h2>
               <p style="margin:0 0 16px;color:#9ca3af;font-size:15px;line-height:1.6;">
-                Вы запросили сброс пароля для вашего аккаунта CryptoFolio.
+                Вы запросили сброс пароля для вашего аккаунта CoinVue.
                 Нажмите на кнопку ниже, чтобы установить новый пароль.
               </p>
               <p style="margin:0 0 24px;color:#9ca3af;font-size:15px;line-height:1.6;">
@@ -153,7 +153,7 @@ export class EmailService implements OnModuleInit {
                 Ваш пароль останется прежним.
               </p>
               <p style="margin:0;color:#6b7280;font-size:12px;">
-                © ${new Date().getFullYear()} CryptoFolio. Все права защищены.
+                © ${new Date().getFullYear()} CoinVue. Все права защищены.
               </p>
             </td>
           </tr>
@@ -174,7 +174,7 @@ export class EmailService implements OnModuleInit {
     const verifyLink = `${frontendUrl}/verify-email?token=${token}`;
     const from = this.config.get<string>(
       'RESEND_FROM',
-      'CryptoFolio <noreply@dvbstudio.online>',
+      'CoinVue <noreply@dvbstudio.online>',
     );
 
     const html = `
@@ -187,12 +187,12 @@ export class EmailService implements OnModuleInit {
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#13131a;border:1px solid rgba(255,255,255,0.06);border-radius:16px;overflow:hidden;">
         <tr><td style="padding:40px 40px 20px;text-align:center;">
           <div style="display:inline-block;width:48px;height:48px;background:linear-gradient(135deg,#d4af37,#f4e5a1);border-radius:12px;line-height:48px;font-size:24px;font-weight:700;color:#0a0a0f;">₿</div>
-          <h1 style="margin:20px 0 0;font-size:24px;font-weight:600;letter-spacing:-0.02em;">CryptoFolio</h1>
+          <h1 style="margin:20px 0 0;font-size:24px;font-weight:600;letter-spacing:-0.02em;">CoinVue</h1>
         </td></tr>
         <tr><td style="padding:20px 40px;">
           <h2 style="margin:0 0 16px;font-size:20px;font-weight:600;">Подтвердите ваш email</h2>
           <p style="margin:0 0 16px;color:#9ca3af;font-size:15px;line-height:1.6;">
-            Вы зарегистрировались в CryptoFolio. Нажмите кнопку ниже, чтобы подтвердить адрес <strong style="color:#fff;">${email}</strong>.
+            Вы зарегистрировались в CoinVue. Нажмите кнопку ниже, чтобы подтвердить адрес <strong style="color:#fff;">${email}</strong>.
           </p>
           <p style="margin:0 0 24px;color:#9ca3af;font-size:15px;line-height:1.6;">
             Ссылка действительна в течение <strong style="color:#fff;">24 часов</strong>.
@@ -206,7 +206,7 @@ export class EmailService implements OnModuleInit {
           <p style="margin:0;word-break:break-all;color:#d4af37;font-size:12px;line-height:1.5;">${verifyLink}</p>
         </td></tr>
         <tr><td style="padding:24px 40px 40px;border-top:1px solid rgba(255,255,255,0.06);">
-          <p style="margin:0;color:#6b7280;font-size:12px;">© ${new Date().getFullYear()} CryptoFolio. Все права защищены.</p>
+          <p style="margin:0;color:#6b7280;font-size:12px;">© ${new Date().getFullYear()} CoinVue. Все права защищены.</p>
         </td></tr>
       </table>
     </td></tr>
@@ -215,7 +215,7 @@ export class EmailService implements OnModuleInit {
 
     await this.send({
       to: email,
-      subject: 'Подтверждение email — CryptoFolio',
+      subject: 'Подтверждение email — CoinVue',
       html,
       from,
     });

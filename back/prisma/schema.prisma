@@ -24,16 +24,26 @@ enum Role {
   // В будущем: MODERATOR, SUPPORT, API_CLIENT
 }
 
+// Добавляем enum провайдеров авторизации
+enum AuthProvider {
+  CREDENTIALS // классическая регистрация по email/password
+  YANDEX // OAuth через Яндекс
+}
+
 // Модель пользователя — ядро изоляции данных
 model User {
-  id           String   @id @default(cuid()) // используем cuid для консистентности с Transaction
-  email        String   @unique // уникальный идентификатор для входа
-  passwordHash String   @map("password_hash") // хэш bcrypt, никогда не храните plain
-  displayName  String?  @map("display_name") // опциональное имя для UI
-  emailVerified Boolean @default(false) @map("email_verified") // Флаг верификации
-    role          Role     @default(USER) //  роль
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id            String       @id @default(cuid()) // используем cuid для консистентности с Transaction
+  email         String       @unique // уникальный идентификатор для входа
+  passwordHash  String       @map("password_hash") // хэш bcrypt, никогда не храните plain
+  displayName   String?      @map("display_name") // опциональное имя для UI
+  emailVerified Boolean      @default(false) @map("email_verified") // Флаг верификации
+  role          Role         @default(USER) //  роль
+
+  yandexId      String?      @unique @map("yandex_id") // ID из Яндекс OAuth
+  authProvider  AuthProvider @default(CREDENTIALS) @map("auth_provider")
+  
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
 
   transactions       Transaction[] // связь один-ко-многим с транзакциями
   sessions           RefreshSession[] // активные refresh-сессии для управления устройствами

@@ -1,7 +1,7 @@
 // front/src/components/Navbar/Navbar.tsx
 
 import { Link, useLocation } from "react-router-dom";
-import { PieChart, BarChart2, PlusCircle, Settings, User } from "lucide-react";
+import { PieChart, BarChart2, PlusCircle, Settings, User, LogOut } from "lucide-react";
 import { useAuthStore } from '../../store/authStore';
 import { useModal } from "../../hooks/useModal";
 import { TransactionForm } from "../TransactionForm/TransactionForm";
@@ -55,10 +55,6 @@ export const Navbar = () => {
             </div>
           )}
 
-          <button onClick={logout} style={{ padding: '8px 16px', cursor: 'pointer' }}>
-            Выйти
-          </button>
-
           <div className="navbar-actions">
             <button className="icon-btn" onClick={handleAddTransaction} aria-label="Добавить транзакцию">
               <PlusCircle size={20} />
@@ -68,6 +64,9 @@ export const Navbar = () => {
             </button>
             <button className="icon-btn" aria-label="Профиль">
               <User size={20} />
+            </button>
+            <button onClick={logout} className="icon-btn" aria-label="Выход">
+              <LogOut size={20} />
             </button>
           </div>
         </div>

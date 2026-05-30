@@ -129,7 +129,7 @@ export function RegisterPage() {
 
   // ФОРМА РЕГИСТРАЦИИ
   return (
-    <AuthLayout title="Создать аккаунт" subtitle="Присоединяйся к CryptoFolio">
+    <AuthLayout title="Создать аккаунт" subtitle="Присоединяйся к CoinVue">
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <FormField id="displayName" label="Имя" error={errors.displayName?.message}>
           <input

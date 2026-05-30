@@ -4,56 +4,58 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
-  UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { WsException } from '@nestjs/websockets';
 import type { Socket } from 'socket.io';
 
-// WS-Guard: валидирует токен из handshake.auth.token ИЛИ из cookie access_token
+// WS-Guard: валидирует JWT из handshake cookie или auth.token
 @Injectable()
 export class JwtWsGuard implements CanActivate {
-  constructor(private jwt: JwtService) {}
+  private readonly logger = new Logger(JwtWsGuard.name); // Стандартный NestJS Logger
+
+  constructor(private readonly jwt: JwtService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const client = context.switchToWs().getClient<Socket>();
 
-    // Приоритет: auth.token > cookie > Authorization header
+    // Приоритет: явный auth.token (для мобильных/SDK) → httpOnly cookie
     let token: string | undefined = client.handshake?.auth?.token;
 
     if (!token) {
-      const cookies = client.handshake?.headers?.cookie ?? '';
-      const match = cookies
-        .split('; ')
-        .find((c) => c.startsWith('access_token='));
-      token = match?.split('=')[1];
+      const cookieHeader = client.handshake?.headers?.cookie ?? '';
+      // Безопасный парсинг: regex извлекает значение до первой точки с запятой
+      const match = cookieHeader.match(/access_token=([^;]+)/);
+      token = match?.[1];
     }
 
     if (!token) {
-      this.logger?.debug(
-        `[JwtWsGuard] Токен не найден для clientId=${client.id}`,
+      this.logger.debug(
+        `[JwtWsGuard] Токен не найден в handshake, clientId=${client.id}`,
       );
-      throw new WsException(new UnauthorizedException('Токен не передан'));
+      throw new WsException('Unauthorized: токен отсутствует');
     }
 
     try {
+      // Асинхронная верификация JWT с проверкой подписи и срока
       const payload = await this.jwt.verifyAsync(token);
-      (client.data as any).user = { id: payload.sub, email: payload.email };
+
+      // Сохраняем пользователя в client.data для использования в Gateway/Handlers
+      (client.data as any).user = {
+        id: payload.sub,
+        email: payload.email,
+        role: payload.role, // Критично для будущей RBAC-проверки в WS
+      };
+
+      this.logger.debug(`[JwtWsGuard] Токен валиден, userId=${payload.sub}`);
       return true;
-    } catch (err) {
-      if (err instanceof Error) {
-        this.logger?.debug(
-          `[JwtWsGuard] Ошибка верификации токена: ${err.message}`,
-        );
-      }
-      throw new WsException(
-        new UnauthorizedException('Невалидный или истёкший токен'),
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown JWT error';
+      this.logger.debug(
+        `[JwtWsGuard] Ошибка верификации: ${msg}, clientId=${client.id}`,
       );
+      throw new WsException('Unauthorized: невалидный или истёкший токен');
     }
   }
-
-  // Добавляем логгер для отладки, если нужно
-  private readonly logger = new (require('@nestjs/common').Logger)(
-    JwtWsGuard.name,
-  );
 }

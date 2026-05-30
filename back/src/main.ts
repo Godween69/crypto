@@ -2,14 +2,15 @@
 
 import { AppModule } from './app.module';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, Logger } from '@nestjs/common'; // <-- Импортируем Logger
+import { ValidationPipe, Logger } from '@nestjs/common';
 import * as cookieParser from 'cookie-parser';
+// Дефолтный импорт вместо namespace import
+import cookieSession from 'cookie-session';
 
 import { WinstonModule } from 'nest-winston';
 import * as winston from 'winston';
 
 async function bootstrap() {
-  // Определяем уровень логирования: в prod только info+, в dev — всё включая debug
   const isProd = process.env.NODE_ENV === 'production';
   const consoleLogLevel = isProd ? 'info' : 'debug';
 
@@ -17,9 +18,8 @@ async function bootstrap() {
     logger: WinstonModule.createLogger({
       level: 'debug',
       transports: [
-        // Console: в dev показывает debug+, в prod только info+
         new winston.transports.Console({
-          level: consoleLogLevel, // Winston фильтрует сообщения по этому порогу
+          level: consoleLogLevel,
           format: winston.format.combine(
             winston.format.timestamp({ format: 'DD-MM HH:mm:ss' }),
             winston.format.colorize(),
@@ -29,7 +29,6 @@ async function bootstrap() {
             ),
           ),
         }),
-        // Файл app.log: все логи уровня debug+
         new winston.transports.File({
           filename: 'logs/app.log',
           level: 'debug',
@@ -38,7 +37,6 @@ async function bootstrap() {
             winston.format.json(),
           ),
         }),
-        // Файл error.log: только ошибки
         new winston.transports.File({
           filename: 'logs/error.log',
           level: 'error',
@@ -51,14 +49,28 @@ async function bootstrap() {
     }),
   });
 
-  // Используем NestJS Logger вместо прямого winston
-  // Он автоматически использует Winston, настроенный выше
   const logger = new Logger('Bootstrap');
 
-  // Включаем парсер кук
+  // 1. Парсер кук
   app.use(cookieParser.default());
 
-  // Получаем URL фронта из env с дефолтным значением
+  // 2. cookie-session: сохраняет req.session в подписанной httpOnly cookie
+  // Passport использует req.session для хранения OAuth state (CSRF-защита)
+  app.use(
+    cookieSession({
+      name: 'session',
+      keys: [
+        process.env.SESSION_SECRET ||
+          'your-super-secret-key-change-in-production',
+      ],
+      maxAge: 10 * 60 * 1000, // 10 минут на OAuth-флоу
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'lax',
+      signed: true,
+    }),
+  );
+
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 
   app.enableCors({
