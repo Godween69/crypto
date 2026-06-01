@@ -1,13 +1,16 @@
+// back/src/modules/transaction/mappers/transaction.mapper.ts
+
 import { Transaction as PrismaTransaction } from '@prisma/client';
 import type { TransactionType } from '../types/transaction.types';
-import { Transaction } from '@prisma/client';
 
+// Валидация типа транзакции: защищает от некорректных значений из БД
 function assertTransactionType(type: string): TransactionType {
   if (type === 'BUY' || type === 'SELL') return type;
   throw new Error(`Invalid transaction type: ${type}`);
 }
 
-export function toDomain(tx: PrismaTransaction): Transaction {
+// Маппер из Prisma-модели в доменный тип: исключает userId из ответа фронтенду
+export function toDomain(tx: PrismaTransaction) {
   return {
     id: tx.id,
     symbol: tx.symbol,

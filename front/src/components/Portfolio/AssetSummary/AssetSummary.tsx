@@ -1,10 +1,10 @@
 // front/src/components/Portfolio/AssetSummary/AssetSummary.tsx
 
-import type { AssetPosition } from "../../../types/portfolio.types";
+import type { PortfolioItem } from "../../../types/portfolio.types";
 import "./AssetSummary.css";
 
 interface Props {
-  data: AssetPosition;
+  data: PortfolioItem;
 }
 
 export const AssetSummary = ({ data }: Props) => {

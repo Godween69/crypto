@@ -1,7 +1,6 @@
-// back/prisma/schema.prisma
-
 // npx prisma migrate dev --name описание
-// npx prisma migrate reset - удаляет ВСЕ таблицы
+// npx prisma migrate reset --force - удаляет ВСЕ таблицы
+
 // npx prisma generate - пересобирает Prisma Client
 
 // npx prisma studio -  запускает веб-интерфейс
@@ -18,13 +17,69 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Роли пользователей: расширяемый enum для RBAC
+enum Role {
+  USER
+  ADMIN
+  // В будущем: MODERATOR, SUPPORT, API_CLIENT
+}
+
+// Добавляем enum провайдеров авторизации
+enum AuthProvider {
+  CREDENTIALS // классическая регистрация по email/password
+  YANDEX // OAuth через Яндекс
+}
+
+// Модель пользователя — ядро изоляции данных
+model User {
+  id            String       @id @default(cuid()) // используем cuid для консистентности с Transaction
+  email         String       @unique // уникальный идентификатор для входа
+  passwordHash  String       @map("password_hash") // хэш bcrypt, никогда не храните plain
+  displayName   String?      @map("display_name") // опциональное имя для UI
+  emailVerified Boolean      @default(false) @map("email_verified") // Флаг верификации
+  role          Role         @default(USER) //  роль
+
+  yandexId      String?      @unique @map("yandex_id") // ID из Яндекс OAuth
+  authProvider  AuthProvider @default(CREDENTIALS) @map("auth_provider")
+  
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  transactions       Transaction[] // связь один-ко-многим с транзакциями
+  sessions           RefreshSession[] // активные refresh-сессии для управления устройствами
+  portfolioSnapshots PortfolioSnapshot[] // снимки баланса
+
+  @@map("users")
+}
+
+// Сессии refresh-токенов — позволяют делать ротацию и детектировать кражу
+model RefreshSession {
+  id           String   @id @default(cuid()) // cuid для консистентности
+  userId       String   @map("user_id")
+  refreshToken String   @unique @map("refresh_token") // сам токен для поиска при refresh
+  fingerprint  String? // хэш UA+screen+tz для Re-use Detection
+  ip           String? // IP для аудита
+  expiresAt    DateTime @map("expires_at") // абсолютное время истечения
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade) // каскадное удаление при удалении юзера
+
+  @@index([userId]) // ускорение поиска сессий конкретного пользователя
+  @@map("refresh_sessions")
+}
+
 model Transaction {
   id        String   @id @default(cuid()) // уникальный идентификатор записи
+  userId    String   @map("user_id") // FK на пользователя — основа изоляции данных
   symbol    String // тикер актива
   type      String // BUY / SELL
   amount    Float // количество
   price     Float // цена на момент сделки
   createdAt DateTime @default(now()) // момент события
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade) // каскадное удаление транзакций
+
+  @@index([userId, symbol, createdAt]) // составной индекс для быстрого расчёта портфеля по пользователю
 }
 
 model Coin {
@@ -40,10 +95,22 @@ model Coin {
 
 model PortfolioSnapshot {
   id          String   @id @default(cuid())
+  userId      String   @map("user_id") // каждый пользователь имеет свою историю портфеля
   timestamp   DateTime // момент фиксации стоимости
   granularity String // '1h' | '1d' | '1w' | '1m'
   totalValue  Float // общая стоимость портфеля в USD
 
-  @@index([granularity, timestamp]) // составной индекс для range-запросов
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade) // каскадное удаление истории
+
+  @@index([userId, granularity, timestamp]) // добавили userId в начало индекса для фильтрации по пользователю
   @@map("portfolio_snapshots")
 }
+
+/**
+ * Как течёт данные и почему это работает:
+ * Сохранение cuid(): Все новые модели (User, RefreshSession) используют cuid() вместо autoincrement(). Это сохраняет единую стратегию генерации ID в проекте и предотвращает конфликты типов в TypeScript при связывании сущностей.
+ * Индекс [userId, symbol, createdAt]: В Transaction он заменяет предыдущую логику. Теперь PortfolioService сначала фильтрует по userId (используя префикс индекса), затем по символу и сортирует по времени. Это O(log N) вместо full scan.
+ * PortfolioSnapshot стал персональным: Добавлено поле userId и обновлён составной индекс. Раньше снапшоты были глобальными (что подходит для single-user), теперь каждый пользователь видит только свою историческую кривую доходности. Индекс [userId, granularity, timestamp] позволяет эффективно выбирать диапазон дат для конкретного пользователя.
+ * Каскадное удаление (onDelete: Cascade): При удалении пользователя PostgreSQL автоматически очищает transactions, refresh_sessions и portfolio_snapshots. Это исключает появление «битых» внешних ключей и утечку остаточных данных.
+ * Модель Coin не изменена: Она остаётся справочником рынка, общим для всех пользователей. Аутентификация не должна затрагивать рыночные данные — они кэшируются и обслуживаются глобально.
+ */

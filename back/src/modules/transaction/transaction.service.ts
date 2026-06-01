@@ -1,11 +1,10 @@
-// back\src\transactions\transaction.service.ts
+// back/src/modules/transaction/transaction.service.ts
 
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { toDomain } from './mappers/transaction.mapper';
-import { Transaction } from '@prisma/client';
 import { PortfolioSnapshotService } from '../../analytics/portfolio-snapshot.service';
 
 @Injectable()
@@ -14,56 +13,44 @@ export class TransactionService {
 
   constructor(
     private prisma: PrismaService,
-    private snapshotService: PortfolioSnapshotService, // сервис пересборки графика
+    private snapshotService: PortfolioSnapshotService,
   ) {}
 
-  // фоновый триггер пересборки: не блокирует HTTP-ответ, ошибки пишутся в лог
-  private triggerRebuild(reason: string) {
-    this.logger.log(
-      `🔁 triggerRebuild [${reason}] → запуск snapshotService.rebuild() в фоне`,
-    );
-    this.snapshotService
-      .rebuild()
-      .catch((err) =>
-        this.logger.error(
-          `❌ Background snapshot rebuild failed [${reason}]`,
-          err,
-        ),
-      );
-  }
-
-  async create(dto: CreateTransactionDto): Promise<Transaction> {
+  // Все обращения к моделям идут через prisma.x (расширенный клиент)
+  async create(dto: CreateTransactionDto) {
     const createdAt = dto.date ? new Date(dto.date) : new Date();
     this.logger.log(
       `➕ Создание транзакции: ${dto.type} ${dto.amount} ${dto.symbol.toUpperCase()} @ $${dto.price}`,
     );
-    const tx = await this.prisma.transaction.create({
+
+    const tx = await this.prisma.x.transaction.create({
       data: {
         symbol: dto.symbol.toUpperCase(),
         type: dto.type,
         amount: dto.amount,
         price: dto.price,
         createdAt,
-      },
+      } as any,
     });
+
     this.logger.log(`✅ Транзакция создана (id=${tx.id})`);
-    this.triggerRebuild(`create:${tx.id}`); // запускаем пересборку в фоне
+    this.triggerRebuild(`create:${tx.id}`);
     return toDomain(tx);
   }
 
-  async findAll(symbol?: string): Promise<Transaction[]> {
-    const txs = await this.prisma.transaction.findMany({
+  async findAll(symbol?: string) {
+    const txs = await this.prisma.x.transaction.findMany({
       where: symbol ? { symbol: symbol.toUpperCase() } : undefined,
       orderBy: { createdAt: 'desc' },
     });
     return txs.map(toDomain);
   }
 
-  async update(id: string, dto: UpdateTransactionDto): Promise<Transaction> {
+  async update(id: string, dto: UpdateTransactionDto) {
     this.logger.log(
       `✏️ Обновление транзакции id=${id}: ${JSON.stringify(dto)}`,
     );
-    const tx = await this.prisma.transaction.update({
+    const tx = await this.prisma.x.transaction.update({
       where: { id },
       data: {
         ...dto,
@@ -76,9 +63,9 @@ export class TransactionService {
     return toDomain(tx);
   }
 
-  async remove(id: string): Promise<Transaction> {
+  async remove(id: string) {
     this.logger.log(`🗑️ Удаление транзакции id=${id}`);
-    const tx = await this.prisma.transaction.delete({ where: { id } });
+    const tx = await this.prisma.x.transaction.delete({ where: { id } });
     this.logger.log(
       `✅ Транзакция удалена (id=${tx.id}, ${tx.type} ${tx.amount} ${tx.symbol})`,
     );
@@ -90,12 +77,27 @@ export class TransactionService {
     this.logger.log(
       `🗑️ Удаление всех транзакций для символа ${symbol.toUpperCase()}`,
     );
-    const result = await this.prisma.transaction.deleteMany({
+    const result = await this.prisma.x.transaction.deleteMany({
       where: { symbol: symbol.toUpperCase() },
     });
     this.logger.log(
       `✅ Удалено транзакций: ${result.count} для ${symbol.toUpperCase()}`,
     );
     this.triggerRebuild(`deleteBySymbol:${symbol}`);
+  }
+
+  // triggerRebuild без изменений
+  private triggerRebuild(reason: string) {
+    this.logger.log(
+      `🔁 triggerRebuild [${reason}] → запуск snapshotService.rebuild() в фоне`,
+    );
+    this.snapshotService
+      .rebuild()
+      .catch((err) =>
+        this.logger.error(
+          `❌ Background snapshot rebuild failed [${reason}]`,
+          err,
+        ),
+      );
   }
 }

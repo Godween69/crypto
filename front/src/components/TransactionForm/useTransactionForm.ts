@@ -56,6 +56,7 @@ export const useTransactionForm = ({
   const [fetchSymbol, setFetchSymbol] = useState(symbol ?? "");
   const [useTodayDate, setUseTodayDate] = useState(true);
 
+  // Исправлено: добавлены зависимости для корректного обновления defaultValues
   const defaultValues = useMemo(
     () => ({
       symbol: symbol ?? initialData?.symbol ?? "",
@@ -64,7 +65,14 @@ export const useTransactionForm = ({
       price: initialData?.price,
       date: initialData?.date ?? computeTodayDate(),
     }),
-    [],
+    [
+      symbol,
+      initialData?.symbol,
+      initialData?.type,
+      initialData?.amount,
+      initialData?.price,
+      initialData?.date,
+    ],
   );
 
   const form = useForm<TransactionFormValues>({

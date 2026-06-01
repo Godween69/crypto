@@ -1,10 +1,13 @@
 // front/src/components/Analytics/PortfolioIndexChart/PortfolioIndexChart.tsx
+
 import { useEffect, useRef, useMemo, useState } from 'react';
 import { useQuery, keepPreviousData, useQueryClient } from '@tanstack/react-query';
 import * as echarts from 'echarts';
 import type { EChartsOption, TooltipComponentOption } from 'echarts';
 import { INDEX_CHART_CONFIG } from './index-chart.config';
 import type { RangeKey } from './index-chart.config';
+import { api } from '../../../api/client';
+import { useAuthStore } from '../../../store/authStore';
 import './PortfolioIndexChart.css';
 
 type IndexPoint = { timestamp: string; value: number };
@@ -23,26 +26,32 @@ export const PortfolioIndexChart = () => {
   const [range, setRange] = useState<RangeKey>(INDEX_CHART_CONFIG.defaultRange);
   const queryClient = useQueryClient();
 
+  // Используем userId для изоляции кэша
+  const userId = useAuthStore((state) => state.user?.id);
+
   const { data, isLoading, isError } = useQuery<IndexPoint[]>({
-    queryKey: ['portfolio-index', range],
+    // Ключ включает userId и range — полная изоляция по пользователю
+    queryKey: ['portfolio-index', userId, range],
     queryFn: async () => {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/analytics/portfolio-index?range=${range}`);
-      if (!res.ok) throw new Error('Failed to fetch index');
-      const json = await res.json();
-      return json as IndexPoint[];
+      const res = await api.get(`/analytics/portfolio-index?range=${range}`);
+      return res.data as IndexPoint[];
     },
-    staleTime: 30_000, // 🔥 сокращено до 30 сек для быстрой синхронизации после сделок
+    staleTime: 30_000,
     refetchOnWindowFocus: false,
     placeholderData: keepPreviousData,
+    enabled: !!userId,
   });
 
-  // публичный метод для мгновенной инвалидации кэша после транзакций
+  // Слушаем событие успешной транзакции для мгновенной инвалидации
   useEffect(() => {
-    // слушаем кастомное событие от формы транзакций
-    const handler = () => queryClient.invalidateQueries({ queryKey: ['portfolio-index'] });
+    const handler = () => {
+      console.log('[PortfolioIndexChart] Инвалидация кэша после транзакции');
+      queryClient.invalidateQueries({ queryKey: ['portfolio-index', userId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio', userId] });
+    };
     window.addEventListener('portfolio:transaction:success', handler);
     return () => window.removeEventListener('portfolio:transaction:success', handler);
-  }, [queryClient]);
+  }, [queryClient, userId]);
 
   const chartSeries = useMemo((): [number, number][] => {
     if (!data || data.length === 0) return [];

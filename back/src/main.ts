@@ -1,42 +1,42 @@
-// back\src\main.ts
+// back/src/main.ts
 
 import { AppModule } from './app.module';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
+import * as cookieParser from 'cookie-parser';
+// Дефолтный импорт вместо namespace import
+import cookieSession from 'cookie-session';
 
 import { WinstonModule } from 'nest-winston';
 import * as winston from 'winston';
 
 async function bootstrap() {
+  const isProd = process.env.NODE_ENV === 'production';
+  const consoleLogLevel = isProd ? 'info' : 'debug';
+
   const app = await NestFactory.create(AppModule, {
-    // ────── WINSTON LOGGER ──────
     logger: WinstonModule.createLogger({
+      level: 'debug',
       transports: [
-        // консоль (dev)
         new winston.transports.Console({
+          level: consoleLogLevel,
           format: winston.format.combine(
-            // Генерируем таймстамп
             winston.format.timestamp({ format: 'DD-MM HH:mm:ss' }),
-            // Красим уровень лога
             winston.format.colorize(),
             winston.format.printf(
-              // Собираем строку: [Время] Уровень: Сообщение
               ({ timestamp, level, message }) =>
                 `${timestamp} ${level}: ${message}`,
             ),
           ),
         }),
-
-        // общий лог файл
         new winston.transports.File({
           filename: 'logs/app.log',
+          level: 'debug',
           format: winston.format.combine(
             winston.format.timestamp(),
-            winston.format.json(), // JSON удобнее для чтения файлами/системами логирования
+            winston.format.json(),
           ),
         }),
-
-        // только ошибки
         new winston.transports.File({
           filename: 'logs/error.log',
           level: 'error',
@@ -49,9 +49,35 @@ async function bootstrap() {
     }),
   });
 
+  const logger = new Logger('Bootstrap');
+
+  // 1. Парсер кук
+  app.use(cookieParser.default());
+
+  // 2. cookie-session: сохраняет req.session в подписанной httpOnly cookie
+  // Passport использует req.session для хранения OAuth state (CSRF-защита)
+  app.use(
+    cookieSession({
+      name: 'session',
+      keys: [
+        process.env.SESSION_SECRET ||
+          'your-super-secret-key-change-in-production',
+      ],
+      maxAge: 10 * 60 * 1000, // 10 минут на OAuth-флоу
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'lax',
+      signed: true,
+    }),
+  );
+
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
   app.enableCors({
-    origin: process.env.FRONTEND_URL,
+    origin: frontendUrl,
     credentials: true,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type, Accept, Authorization, X-Client-Fingerprint',
   });
 
   app.useGlobalPipes(
@@ -62,7 +88,12 @@ async function bootstrap() {
     }),
   );
 
-  await app.listen(process.env.PORT ?? 3000);
+  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  await app.listen(port);
+
+  logger.log(
+    `🚀 Приложение запущено на http://localhost:${port} (в режиме: ${isProd ? 'продакшена' : 'разработки'})`,
+  );
 }
 
 bootstrap();

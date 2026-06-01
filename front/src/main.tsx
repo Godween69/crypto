@@ -1,3 +1,5 @@
+// front\src\main.tsx
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import Lenis from 'lenis'; // Импорт библиотеки плавного скролла
