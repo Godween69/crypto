@@ -1,4 +1,4 @@
-// back/src/modules/market/coin-resolver.service.ts
+// back\src\providers\coingecko\coingecko.resolver.ts
 
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -7,7 +7,7 @@ import { ConfigService } from '@nestjs/config';
 
 import axios from 'axios';
 
-import { CoinRepository } from './coin.repository';
+import { CoinRepository } from '../../modules/market/coin.repository';
 import { RedisService } from '../../redis/redis.service';
 
 // Ответ CoinGecko
@@ -27,7 +27,7 @@ type ResolvedCoin = {
 };
 
 @Injectable()
-export class CoinResolverService implements OnModuleInit {
+export class CoingeckoResolver implements OnModuleInit {
   private map = new Map<string, string>();
 
   // TTL для кэширования "монеты нет" (чтобы не спамить API при опечатках)

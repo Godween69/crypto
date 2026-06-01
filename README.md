@@ -3,6 +3,7 @@
 crypto
 ├─ back
 │  ├─ .prettierrc
+│  ├─ diag-fetch.mjs
 │  ├─ Dockerfile
 │  ├─ eslint.config.mjs
 │  ├─ nest-cli.json
@@ -20,6 +21,10 @@ crypto
 │  │  │  │  └─ migration.sql
 │  │  │  ├─ 20260526121009_sync_schema_after_manual_migration
 │  │  │  │  └─ migration.sql
+│  │  │  ├─ 20260528084536_add_email_verified_and_role
+│  │  │  │  └─ migration.sql
+│  │  │  ├─ 20260528130803_add_yandex_oauth_fields
+│  │  │  │  └─ migration.sql
 │  │  │  └─ migration_lock.toml
 │  │  └─ schema.prisma
 │  ├─ README.md
@@ -34,6 +39,8 @@ crypto
 │  │  │  └─ prisma
 │  │  │     ├─ prisma.module.ts
 │  │  │     └─ prisma.service.ts
+│  │  ├─ config
+│  │  │  └─ market.config.ts
 │  │  ├─ main.ts
 │  │  ├─ modules
 │  │  │  ├─ auth
@@ -42,7 +49,8 @@ crypto
 │  │  │  │  ├─ auth.service.ts
 │  │  │  │  ├─ decorators
 │  │  │  │  │  ├─ current-user.decorator.ts
-│  │  │  │  │  └─ public.decorator.ts
+│  │  │  │  │  ├─ public.decorator.ts
+│  │  │  │  │  └─ roles.decorator.ts
 │  │  │  │  ├─ dto
 │  │  │  │  │  ├─ forgot-password.dto.ts
 │  │  │  │  │  ├─ login.dto.ts
@@ -50,19 +58,20 @@ crypto
 │  │  │  │  │  └─ reset-password.dto.ts
 │  │  │  │  ├─ guards
 │  │  │  │  │  ├─ jwt-auth.guard.ts
-│  │  │  │  │  └─ jwt-ws.guard.ts
+│  │  │  │  │  ├─ jwt-ws.guard.ts
+│  │  │  │  │  └─ roles.guard.ts
 │  │  │  │  ├─ info.md
 │  │  │  │  ├─ interceptors
 │  │  │  │  │  └─ user-context.interceptor.ts
 │  │  │  │  ├─ middleware
 │  │  │  │  │  └─ user-context.middleware.ts
 │  │  │  │  └─ strategies
-│  │  │  │     └─ jwt.strategy.ts
+│  │  │  │     ├─ jwt.strategy.ts
+│  │  │  │     └─ yandex.strategy.ts
 │  │  │  ├─ email
 │  │  │  │  ├─ email.module.ts
 │  │  │  │  └─ email.service.ts
 │  │  │  ├─ market
-│  │  │  │  ├─ coin-resolver.service.ts
 │  │  │  │  ├─ coin.repository.ts
 │  │  │  │  ├─ info.md
 │  │  │  │  ├─ market.controller.ts
@@ -91,10 +100,20 @@ crypto
 │  │  │     ├─ transaction.service.ts
 │  │  │     └─ types
 │  │  │        └─ transaction.types.ts
-│  │  └─ redis
-│  │     ├─ info.txt
-│  │     ├─ redis.module.ts
-│  │     └─ redis.service.ts
+│  │  ├─ providers
+│  │  │  ├─ coingecko
+│  │  │  │  ├─ coingecko.provider.ts
+│  │  │  │  └─ coingecko.resolver.ts
+│  │  │  ├─ coinlore
+│  │  │  │  └─ coinlore.provider.ts
+│  │  │  ├─ info.md
+│  │  │  └─ market-provider.interface.ts
+│  │  ├─ redis
+│  │  │  ├─ info.txt
+│  │  │  ├─ redis.module.ts
+│  │  │  └─ redis.service.ts
+│  │  └─ types
+│  │     └─ passport-yandex.d.ts
 │  ├─ tsconfig.build.json
 │  └─ tsconfig.json
 ├─ front
@@ -196,18 +215,16 @@ crypto
 │  │  │  ├─ Auth
 │  │  │  │  ├─ ForgotPasswordPage.tsx
 │  │  │  │  ├─ LoginPage.tsx
+│  │  │  │  ├─ OAuthSuccessPage.tsx
 │  │  │  │  ├─ RegisterPage.tsx
-│  │  │  │  └─ ResetPasswordPage.tsx
+│  │  │  │  ├─ ResetPasswordPage.tsx
+│  │  │  │  └─ VerifyEmailPage.tsx
 │  │  │  ├─ ErrorPage
 │  │  │  │  ├─ ErrorPage.css
 │  │  │  │  └─ ErrorPage.tsx
-│  │  │  ├─ LoginPage
-│  │  │  │  └─ index.tsx
 │  │  │  ├─ PortfolioPage
 │  │  │  │  ├─ PortfolioPage.css
 │  │  │  │  └─ PortfolioPage.tsx
-│  │  │  ├─ RegisterPage
-│  │  │  │  └─ index.tsx
 │  │  │  └─ TransactionsPage
 │  │  │     ├─ TransactionsPage.css
 │  │  │     └─ TransactionsPage.tsx

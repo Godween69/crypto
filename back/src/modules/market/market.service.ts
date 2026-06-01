@@ -1,46 +1,50 @@
-// back\src\modules\market\market.service.ts
-
-/*
-1. Сервер стартует
-2. onModuleInit() → загрузка маппинга символов → первый запрос к API
-3. Клиент запрашивает /api/market?symbols=BTC,ETH
-4. getMarketData() → проверка Redis
-   ├── Есть в кэше → мгновенный ответ
-   └── Нет в кэше → refreshMarketCache() (с Promise-lock)
-5. Cron каждые 5 минут:
-   └── Если есть WS клиенты → обновить кэш и разослать
-6. Cron каждый час:
-   └── Всегда обновлять кэш для графика динамики портфеля (даже если нет клиентов) 
-   */
-
+// back/src/modules/market/market.service.ts
+// Оркестратор: CoinLore (цены) + CoinGecko (картинки) + Redis (кэш)
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import axios from 'axios';
-import { CoinResolverService } from './coin-resolver.service';
 import { RedisService } from '../../redis/redis.service';
 import { MarketGateway } from './market.gateway';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { MarketData, CoinGeckoMarket } from './types/market.types';
+import { CoinRepository } from './coin.repository';
+import { MarketData } from './types/market.types';
+import { CoinloreProvider } from '../../providers/coinlore/coinlore.provider';
+import { CoingeckoProvider } from '../../providers/coingecko/coingecko.provider';
 
 @Injectable()
 export class MarketService implements OnModuleInit {
   private readonly logger = new Logger(MarketService.name);
-  private readonly CACHE_TTL = 300; // 5 минут жизни кэша
-
+  private readonly CACHE_TTL = 300; // 5 минут для цен
+  private readonly IMAGE_TTL = 86400 * 30; // 30 дней для картинок
   private refreshPromise: Promise<MarketData[]> | null = null;
 
   constructor(
-    private readonly config: ConfigService,
-    private readonly resolver: CoinResolverService,
+    private readonly coinloreProvider: CoinloreProvider,
+    private readonly coingeckoProvider: CoingeckoProvider,
+    private readonly coinRepository: CoinRepository,
     private readonly redis: RedisService,
     private readonly gateway: MarketGateway,
     private readonly prisma: PrismaService,
   ) {}
 
   async onModuleInit() {
-    await this.resolver.init();
-    await this.refreshMarketCache([], 'onModuleInit');
+    // При старте проверяем портфель и догружаем картинки для существующих монет
+    await this.ensureImagesForPortfolio();
+    void this.refreshMarketCache([], 'onModuleInit');
+  }
+
+  // Проверка и загрузка картинок для всех монет, которые уже есть в транзакциях
+  private async ensureImagesForPortfolio(): Promise<void> {
+    try {
+      const records = await this.prisma.transaction.findMany({
+        select: { symbol: true },
+      });
+      const symbols = [...new Set(records.map((r) => r.symbol.toUpperCase()))];
+      if (symbols.length > 0) await this.ensureImagesForSymbols(symbols);
+    } catch (error) {
+      this.logger.error(
+        `❌ Ошибка ensureImagesForPortfolio: ${error instanceof Error ? error.message : 'unknown'}`,
+      );
+    }
   }
 
   async getMarketData(
@@ -48,24 +52,18 @@ export class MarketService implements OnModuleInit {
     caller = 'direct',
   ): Promise<MarketData[]> {
     if (symbols.length === 0) return [];
-
     this.logger.log(
       `📥 getMarketData [${caller}]: запрос для [${symbols.join(', ')}]`,
     );
 
-    const resolved = await this.resolver.resolveMany(symbols);
     const result: MarketData[] = [];
-    const missing: { symbol: string; geckoId: string }[] = [];
+    const missing: string[] = [];
 
-    // Шаг 1: проверяем single-кэш для каждой монеты
-    for (const coin of resolved) {
-      const singleKey = `market:coin:${coin.symbol}`;
-      const cached = await this.redis.get<MarketData>(singleKey);
-      if (cached) {
-        result.push(cached);
-      } else {
-        missing.push({ symbol: coin.symbol, geckoId: coin.id });
-      }
+    for (const sym of symbols) {
+      const upper = sym.toUpperCase();
+      const cached = await this.redis.get<MarketData>(`market:coin:${upper}`);
+      if (cached) result.push(cached);
+      else missing.push(upper);
     }
 
     if (missing.length === 0) {
@@ -76,54 +74,36 @@ export class MarketService implements OnModuleInit {
     }
 
     this.logger.warn(
-      `⚠️ getMarketData [${caller}]: cache partial MISS, догружаем [${missing.map((m) => m.symbol).join(', ')}]`,
+      `⚠️ getMarketData [${caller}]: cache MISS, догружаем [${missing.join(', ')}]`,
     );
-
-    // 🔥 FIX: Если refreshMarketCache вернет пустой массив из-за ошибки API,
-    // мы не должны добавлять пустоту в результат. Мы вернем только то, что было в кэше.
     const fetched = await this.refreshMarketCache(
-      missing.map((m) => m.symbol),
+      missing,
       `getMarketData:${caller}`,
     );
-
-    for (const item of fetched) {
-      await this.redis.set(`market:coin:${item.symbol}`, item, this.CACHE_TTL);
-      if (missing.some((m) => m.symbol === item.symbol)) {
-        result.push(item);
-      }
-    }
-
+    for (const item of fetched)
+      if (missing.includes(item.symbol)) result.push(item);
     return result;
   }
 
   @Cron('0 * * * *')
   async handleBackgroundPriceUpdate() {
-    this.logger.debug('Фоновый cron: обновление рыночных данных раз в час...');
-    await this.refreshMarketCache([], 'cron:background:1h');
+    this.logger.debug('Фоновый cron: обновление цен раз в час...');
+    void this.refreshMarketCache([], 'cron:background:1h');
   }
 
   @Cron(CronExpression.EVERY_5_MINUTES)
   async handleWsPriceUpdate() {
     if (!this.gateway.hasActiveClients()) return;
-
-    this.logger.debug(
-      'WebSocket cron: обновление рыночных данных каждые 5мин...',
-    );
+    this.logger.debug('WebSocket cron: обновление цен каждые 5мин...');
     const data = await this.refreshMarketCache([], 'cron:ws:5m');
     if (data.length > 0) {
-      for (const item of data) {
+      for (const item of data)
         await this.redis.set(
           `market:coin:${item.symbol}`,
           item,
           this.CACHE_TTL,
         );
-      }
-      const expiresAt = Date.now() + this.CACHE_TTL * 1000;
-      this.gateway.broadcastUpdate(data, expiresAt);
-    } else {
-      this.logger.warn(
-        '❌ [cron:ws:5m] Данные не получены (ошибка API или пустой ответ). Broadcast пропущен.',
-      );
+      this.gateway.broadcastUpdate(data, Date.now() + this.CACHE_TTL * 1000);
     }
   }
 
@@ -132,9 +112,7 @@ export class MarketService implements OnModuleInit {
     caller = 'unknown',
   ): Promise<MarketData[]> {
     if (this.refreshPromise) {
-      this.logger.debug(
-        `[${caller}] Обновление уже выполняется, ожидаем завершение...`,
-      );
+      this.logger.debug(`[${caller}] Обновление уже выполняется, ожидаем...`);
       return this.refreshPromise;
     }
 
@@ -143,48 +121,69 @@ export class MarketService implements OnModuleInit {
         const records = await this.prisma.transaction.findMany({
           select: { symbol: true },
         });
-        const dbSymbols = [...new Set(records.map((r) => r.symbol))];
-        const uniqueSymbols = [
-          ...new Set([...dbSymbols, ...extraSymbols]),
-        ].filter(Boolean);
+        const dbSymbols = [
+          ...new Set(records.map((r) => r.symbol.toUpperCase())),
+        ];
+        const allSymbols = [...new Set([...dbSymbols, ...extraSymbols])].filter(
+          Boolean,
+        );
 
-        if (uniqueSymbols.length === 0) {
+        if (allSymbols.length === 0) {
           this.logger.log(`[${caller}] Портфель пуст, пропускаем обновление`);
           return [];
         }
 
-        const resolved = await this.resolver.resolveMany(uniqueSymbols);
-        const ids = resolved
-          .map((c) => c.id)
-          .sort()
-          .join(',');
-        const apiKey = this.config.get<string>('COINGECKO_API_KEY');
-        const baseUrl = this.config.get<string>('COINGECKO_API_URL');
+        // ШАГ 0: Убеждаемся, что для всех монет есть картинки (грузим из Gecko, если нет в Redis)
+        await this.ensureImagesForSymbols(allSymbols);
 
         this.logger.log(
-          `🚀 [${caller}] Начало обновления API для ${uniqueSymbols.join(', ')}...`,
+          `🚀 [${caller}] Обновление цен для ${allSymbols.join(', ')}...`,
         );
+        let allResults: MarketData[] = [];
+        let remainingSymbols = [...allSymbols];
 
-        const { data } = await axios.get<CoinGeckoMarket>(
-          `${baseUrl}/coins/markets`,
-          {
-            params: { ids, vs_currency: 'usd', price_change_percentage: '24h' },
-            headers: { 'x-cg-demo-api-key': apiKey },
-            timeout: 5000,
-          },
-        );
+        // ШАГ 1: CoinLore (быстрые цены)
+        try {
+          const loreResults =
+            await this.coinloreProvider.fetch(remainingSymbols);
+          allResults.push(...loreResults);
+          const found = new Set(loreResults.map((r) => r.symbol));
+          remainingSymbols = remainingSymbols.filter((s) => !found.has(s));
+          if (loreResults.length > 0)
+            this.logger.log(`✅ CoinLore вернул ${loreResults.length} монет`);
+        } catch (error) {
+          this.logger.warn(
+            `CoinLore ошибка: ${error instanceof Error ? error.message : 'unknown'}`,
+          );
+        }
 
-        const result: MarketData[] = data.map((coin) => ({
-          coinId: coin.id,
-          symbol: coin.symbol.toUpperCase(),
-          currentPrice: coin.current_price ?? 0,
-          change24h: coin.price_change_percentage_24h ?? 0,
-          image: coin.image,
-          rank: coin.market_cap_rank ?? null,
-        }));
+        // ШАГ 2: CoinGecko (фоллбэк для цен, если Lore не нашел)
+        if (remainingSymbols.length > 0) {
+          try {
+            const geckoResults =
+              await this.coingeckoProvider.fetch(remainingSymbols);
+            allResults.push(...geckoResults);
+            if (geckoResults.length > 0)
+              this.logger.log(
+                `✅ CoinGecko вернул ${geckoResults.length} монет`,
+              );
+          } catch (error) {
+            this.logger.warn(
+              `CoinGecko ошибка: ${error instanceof Error ? error.message : 'unknown'}`,
+            );
+          }
+        }
 
-        // 🔥 FIX: Сохраняем в Redis только если получили данные
-        for (const item of result) {
+        // Обогащаем цены картинками из Redis
+        for (const item of allResults) {
+          const imageUrl = await this.redis.get<string>(
+            `market:image:${item.symbol}`,
+          );
+          if (imageUrl) item.image = imageUrl;
+        }
+
+        // Кэшируем финальные данные
+        for (const item of allResults) {
           await this.redis.set(
             `market:coin:${item.symbol}`,
             item,
@@ -193,17 +192,12 @@ export class MarketService implements OnModuleInit {
         }
 
         this.logger.log(
-          `✅ [${caller}] Рыночные данные обновлены (${result.length} монет).`,
+          `✅ [${caller}] Итого обновлено ${allResults.length} монет.`,
         );
-        return result;
+        return allResults;
       } catch (err) {
-        if (err instanceof Error) {
-          this.logger.error(
-            `[${caller}] Ошибка обновления рыночных данных: ${err.message}`,
-          );
-        }
-        // 🔥 ВАЖНО: Возвращаем пустой массив, но НЕ очищаем старый кэш в Redis.
-        // Старые данные останутся жить до истечения TTL, что лучше, чем ничего.
+        if (err instanceof Error)
+          this.logger.error(`[${caller}] Критическая ошибка: ${err.message}`);
         return [];
       } finally {
         this.refreshPromise = null;
@@ -211,5 +205,29 @@ export class MarketService implements OnModuleInit {
     })();
 
     return this.refreshPromise;
+  }
+
+  // Проверка Redis и догрузка картинок через CoinGecko для новых монет
+  private async ensureImagesForSymbols(symbols: string[]): Promise<void> {
+    const missing: string[] = [];
+    for (const sym of symbols) {
+      const cachedImage = await this.redis.get<string>(`market:image:${sym}`);
+      if (!cachedImage) missing.push(sym);
+    }
+    if (missing.length === 0) return;
+
+    this.logger.log(
+      `🖼️ Догрузка картинок из CoinGecko для ${missing.join(', ')}...`,
+    );
+    await this.coingeckoProvider.loadMetadata(missing);
+
+    // Сохраняем в Redis и БД (geckoId)
+    for (const sym of missing) {
+      const meta = this.coingeckoProvider.getMetadata(sym);
+      if (meta) {
+        await this.redis.set(`market:image:${sym}`, meta.image, this.IMAGE_TTL);
+        await this.coinRepository.upsert(sym, meta.geckoId, meta.geckoId); // сохраняем geckoId в БД
+      }
+    }
   }
 }

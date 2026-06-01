@@ -1,28 +1,26 @@
 // back/src/modules/market/market.module.ts
-
 import { Module } from '@nestjs/common';
-import { AuthModule } from '../auth/auth.module'; // JwtWsGuard
 import { MarketService } from './market.service';
 import { MarketController } from './market.controller';
-import { CoinResolverService } from './coin-resolver.service';
-import { CoinRepository } from './coin.repository';
-// import { PrismaModule } from '../../common/prisma/prisma.module';
-import { RedisModule } from '../../redis/redis.module';
 import { MarketGateway } from './market.gateway';
+import { CoinRepository } from './coin.repository';
+import { RedisModule } from '../../redis/redis.module';
+import { AuthModule } from '../auth/auth.module';
+import { CoingeckoResolver } from '../../providers/coingecko/coingecko.resolver';
+import { CoingeckoProvider } from '../../providers/coingecko/coingecko.provider';
+import { CoinloreProvider } from '../../providers/coinlore/coinlore.provider';
 
 @Module({
-  imports: [
-    AuthModule,
-    // PrismaModule, теперь глобальный
-    RedisModule,
-  ],
-  controllers: [MarketController],
+  imports: [RedisModule, AuthModule],
   providers: [
     MarketService,
-    CoinResolverService,
-    CoinRepository,
     MarketGateway,
+    CoinRepository,
+    CoingeckoResolver,
+    CoingeckoProvider,
+    CoinloreProvider,
   ],
+  controllers: [MarketController],
   exports: [MarketService, MarketGateway],
 })
 export class MarketModule {}

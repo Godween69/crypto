@@ -87,6 +87,7 @@ model Coin {
   symbol    String   @unique // тикер (BTC, ETH)
   geckoId   String   @unique // идентификатор CoinGecko
   name      String? // полное название (опционально)
+  image     String?  // URL картинки (CoinGecko CDN)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

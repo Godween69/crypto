@@ -1,5 +1,8 @@
 // back/src/main.ts
 
+import { setDefaultResultOrder } from 'node:dns';
+setDefaultResultOrder('ipv4first'); // форсируем IPv4, обходим зависания DNS в Node.js 17+
+
 import { AppModule } from './app.module';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
