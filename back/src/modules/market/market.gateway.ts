@@ -42,7 +42,7 @@ export class MarketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private nextUpdateAt = Date.now() + this.WS_INTERVAL_MS;
 
   // Инжектим JwtService напрямую для верификации при handshake
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(private readonly jwtService: JwtService) { }
 
   // Аутентификация происходит здесь, так как Guards не запускаются на подключение
   async handleConnection(@ConnectedSocket() client: Socket) {
@@ -156,17 +156,11 @@ export class MarketGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
-  // Персональное уведомление о пересчёте портфеля (безопасная проверка adapter)
+  // Персональное уведомление о пересчёте портфеля
   broadcastPortfolioRebuilt(userId: string) {
-    const rooms = this.server?.sockets?.adapter?.rooms;
-    const roomSize = rooms?.get(`user:${userId}`)?.size ?? 0;
-
     this.logger.debug(
-      `[WS] 📊 Broadcast portfolio:rebuilt → userId=${userId} (${roomSize} подключений в room)`,
+      `[WS] 📊 Broadcast portfolio:rebuilt → userId=${userId}`,
     );
-
-    if (roomSize > 0) {
-      this.server.to(`user:${userId}`).emit('portfolio:rebuilt');
-    }
+    this.server.to(`user:${userId}`).emit('portfolio:rebuilt');
   }
 }

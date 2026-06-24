@@ -13,6 +13,7 @@ export class RedisService implements OnModuleDestroy {
     this.client = new Redis({
       host: this.config.get<string>('REDIS_HOST', '127.0.0.1'),
       port: this.config.get<number>('REDIS_PORT', 6379),
+      password: this.config.get<string>('REDIS_PASSWORD'),
       maxRetriesPerRequest: 3, // лимит повторов при сетевых сбоях
       enableOfflineQueue: true, // буферизация команд при обрыве связи
     });

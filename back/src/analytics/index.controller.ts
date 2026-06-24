@@ -1,16 +1,24 @@
-// back/src/analytics/index.controller.ts
-
 import { Controller, Get, Query, Logger } from '@nestjs/common';
+import { ClsService } from 'nestjs-cls';
 import { PrismaService } from '../common/prisma/prisma.service';
 
 @Controller('analytics')
 export class IndexController {
   private readonly logger = new Logger(IndexController.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cls: ClsService,
+  ) { }
 
   @Get('portfolio-index')
   async getIndex(@Query('range') range: string = '1d') {
+    const userId = this.cls.get<string>('userId');
+    if (!userId) {
+      this.logger.warn('[Analytics] userId не найден в CLS контексте');
+      return [];
+    }
+
     const config: Record<string, { granularity: string; hours: number }> = {
       '1d': { granularity: '1h', hours: 24 },
       '7d': { granularity: '1h', hours: 168 },
@@ -24,29 +32,31 @@ export class IndexController {
     const since = new Date(Date.now() - hours * 3600_000);
 
     let points = await this.prisma.portfolioSnapshot.findMany({
-      where: { granularity, timestamp: { gte: since } },
+      where: {
+        granularity,
+        timestamp: { gte: since },
+        userId,
+      },
       orderBy: { timestamp: 'asc' },
       select: { timestamp: true, totalValue: true },
     });
 
-    // 🔥 Фоллбэк: если rollup-кроны ещё не наработали старший уровень гранулярности
-    // (актуально для dev-среды или свежеустановленного сервера), берём 1h-точки за тот же период.
-    // Это гарантирует, что пользователь никогда не увидит пустой график на длинных таймфреймах.
-    // По мере работы кронов (1h→1d ежедневно, 1d→1w еженедельно, 1w→1m ежемесячно)
-    // фоллбэк будет срабатывать всё реже, пока не исчезнет полностью.
     if (points.length === 0 && granularity !== '1h') {
       points = await this.prisma.portfolioSnapshot.findMany({
-        where: { granularity: '1h', timestamp: { gte: since } },
+        where: {
+          granularity: '1h',
+          timestamp: { gte: since },
+          userId,
+        },
         orderBy: { timestamp: 'asc' },
         select: { timestamp: true, totalValue: true },
       });
       this.logger.log(
-        `🔁 Fallback to 1h for range=${range} (${points.length} points). ` +
-          `Target granularity '${granularity}' not yet available — rollup crons haven't accumulated data yet.`,
+        `🔁 Fallback to 1h for range=${range} (${points.length} points) for userId=${userId}. ` +
+        `Target granularity '${granularity}' not yet available.`,
       );
     }
 
-    // Прореживание до 60 точек с сохранением первой и последней для стабильных границ графика
     const MAX = 60;
     if (points.length > MAX) {
       const step = Math.ceil(points.length / MAX);

@@ -1,0 +1,28 @@
+# ============================================
+# Dockerfile для РАЗРАБОТКИ бэкенда (NestJS)
+# ============================================
+
+FROM node:22-alpine
+
+# Устанавливаем рабочую директорию
+WORKDIR /app
+
+# Копируем файлы зависимостей (для кэша Docker)
+COPY package*.json ./
+
+# Ставим все зависимости (включая devDependencies)
+RUN npm ci
+
+# Копируем Prisma schema
+COPY prisma ./prisma/
+
+# Генерируем Prisma Client
+RUN npx prisma generate
+
+# Копируем остальной код (будет перезаписан через volume)
+COPY . .
+
+EXPOSE 3000
+
+# Watch mode — автоперезапуск при изменении файлов
+CMD ["npm", "run", "start:dev"]
