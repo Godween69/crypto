@@ -1,5 +1,4 @@
 // front/src/pages/Auth/LoginPage.tsx
-
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, useNavigate } from "react-router-dom";
@@ -10,6 +9,8 @@ import { FormField } from "../../components/Auth/FormField";
 import { PasswordInput } from "../../components/Auth/PasswordInput";
 import { OAuthButtons } from "../../components/Auth/OAuthButtons";
 import { loginSchema, type LoginFormData } from "../../utils/auth.schemas";
+import { useEmailDomainValidation } from "../../hooks/useEmailDomainValidation";
+import { getShortValidationMessage } from "../../utils/emailDomainValidator";
 
 // Страница входа: email + password + remember me + OAuth
 export function LoginPage() {
@@ -33,7 +34,17 @@ export function LoginPage() {
   });
 
   // useWatch вместо watch — совместимо с React Compiler
+  const email = useWatch({ control, name: "email" }) ?? "";
   const password = useWatch({ control, name: "password" }) ?? "";
+
+  // Real-time валидация домена
+  const domainValidation = useEmailDomainValidation(email);
+  const validationStatus = email && email.includes("@")
+    ? (domainValidation.isValid ? "valid" : "invalid")
+    : null;
+  const validationMessage = email && email.includes("@")
+    ? getShortValidationMessage(domainValidation)
+    : undefined;
 
   const onSubmit = async (data: LoginFormData) => {
     try {
@@ -59,6 +70,8 @@ export function LoginPage() {
           label="Email"
           error={errors.email?.message}
           hint="Мы никогда не передадим ваш email третьим лицам"
+          validationStatus={validationStatus}
+          validationMessage={validationMessage}
         >
           <input
             id="email"
@@ -100,7 +113,7 @@ export function LoginPage() {
         {/* Submit */}
         <motion.button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || (validationStatus === "invalid")}
           whileTap={{ scale: 0.98 }}
           className="auth-submit"
         >

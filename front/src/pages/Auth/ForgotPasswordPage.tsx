@@ -1,7 +1,6 @@
 // front/src/pages/Auth/ForgotPasswordPage.tsx
-
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "react-router-dom";
 import { motion } from "motion/react";
@@ -13,6 +12,8 @@ import {
   forgotPasswordSchema,
   type ForgotPasswordFormData,
 } from "../../utils/auth.schemas";
+import { useEmailDomainValidation } from "../../hooks/useEmailDomainValidation";
+import { getShortValidationMessage } from "../../utils/emailDomainValidator";
 
 // Страница запроса сброса пароля
 export function ForgotPasswordPage() {
@@ -23,12 +24,24 @@ export function ForgotPasswordPage() {
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<ForgotPasswordFormData>({
     resolver: zodResolver(forgotPasswordSchema),
     defaultValues: { email: "" },
     mode: "onBlur",
   });
+
+  const email = useWatch({ control, name: "email" }) ?? "";
+
+  // Real-time валидация домена
+  const domainValidation = useEmailDomainValidation(email);
+  const validationStatus = email && email.includes("@")
+    ? (domainValidation.isValid ? "valid" : "invalid")
+    : null;
+  const validationMessage = email && email.includes("@")
+    ? getShortValidationMessage(domainValidation)
+    : undefined;
 
   const onSubmit = async (data: ForgotPasswordFormData) => {
     try {
@@ -67,7 +80,6 @@ export function ForgotPasswordPage() {
           >
             <CheckCircle size={32} />
           </div>
-
           <p style={{ color: "#9ca3af", fontSize: "0.95rem", lineHeight: 1.6, margin: "0 0 1rem" }}>
             Если аккаунт с адресом <strong style={{ color: "#fff" }}>{sentEmail}</strong> существует,
             мы отправили на него письмо со ссылкой для сброса пароля.
@@ -96,6 +108,8 @@ export function ForgotPasswordPage() {
           label="Email"
           error={errors.email?.message}
           hint="На этот адрес придёт ссылка для сброса пароля"
+          validationStatus={validationStatus}
+          validationMessage={validationMessage}
         >
           <input
             id="email"
@@ -109,7 +123,7 @@ export function ForgotPasswordPage() {
 
         <motion.button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || (validationStatus === "invalid")}
           whileTap={{ scale: 0.98 }}
           className="auth-submit"
         >

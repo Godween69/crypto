@@ -1,6 +1,6 @@
 // front/src/utils/auth.schemas.ts
-
 import { z } from "zod";
+import { validateEmailDomain } from "./emailDomainValidator";
 
 // Единые правила для email и пароля, переиспользуются на фронте и бэке
 export const emailSchema = z
@@ -11,6 +11,15 @@ export const emailSchema = z
   .regex(
     /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
     "Email должен содержать @ и домен",
+  )
+  .refine(
+    (email) => {
+      const result = validateEmailDomain(email);
+      return result.isValid;
+    },
+    {
+      message: "В соответствии с законодательством РФ разрешено использовать только почту российских сервисов (.ru, .рф, mail.ru, yandex.ru и др.)",
+    }
   )
   .transform((v) => v.toLowerCase().trim());
 

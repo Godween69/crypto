@@ -1,5 +1,4 @@
 // front/src/pages/Auth/RegisterPage.tsx
-
 import { useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,12 +11,13 @@ import { FormField } from "../../components/Auth/FormField";
 import { PasswordInput } from "../../components/Auth/PasswordInput";
 import { OAuthButtons } from "../../components/Auth/OAuthButtons";
 import { registerSchema, type RegisterFormData } from "../../utils/auth.schemas";
+import { useEmailDomainValidation } from "../../hooks/useEmailDomainValidation";
+import { getShortValidationMessage } from "../../utils/emailDomainValidator";
 
 // Страница регистрации: форма → успех → ожидание подтверждения почты
 export function RegisterPage() {
   const register = useAuthStore((s) => s.register);
   const resendVerification = useAuthStore((s) => s.resendVerification);
-
   const [successMsg, setSuccessMsg] = useState("");
   const [registeredEmail, setRegisteredEmail] = useState("");
   const [resendLoading, setResendLoading] = useState(false);
@@ -41,18 +41,26 @@ export function RegisterPage() {
     mode: "onBlur",
   });
 
+  const email = useWatch({ control, name: "email" }) ?? "";
   const password = useWatch({ control, name: "password" }) ?? "";
   const confirmPassword = useWatch({ control, name: "confirmPassword" }) ?? "";
 
+  // Real-time валидация домена
+  const domainValidation = useEmailDomainValidation(email);
+  const validationStatus = email && email.includes('@')
+    ? (domainValidation.isValid ? 'valid' : 'invalid')
+    : null;
+  const validationMessage = email && email.includes('@')
+    ? getShortValidationMessage(domainValidation)
+    : undefined;
+
   const onSubmit = async (data: RegisterFormData) => {
     try {
-      // Регистрация теперь возвращает только сообщение, НЕ логи автоматически
       const msg = await register(data.email, data.password, data.displayName);
       setRegisteredEmail(data.email);
       setSuccessMsg(msg);
     } catch {
-      // Ошибка уже обработана в authStore и выведена в консоль
-      // React Hook Form покажет ошибки валидации в полях
+      // Ошибка уже обработана в authStore
     }
   };
 
@@ -68,7 +76,7 @@ export function RegisterPage() {
     }
   };
 
-  // ЭКРАН УСПЕХА: показывается сразу после успешной регистрации
+  // ЭКРАН УСПЕХА
   if (successMsg) {
     return (
       <AuthLayout title="Проверьте почту" subtitle="Мы отправили письмо с подтверждением">
@@ -92,9 +100,8 @@ export function RegisterPage() {
           >
             <CheckCircle size={32} />
           </div>
-
           <p style={{ color: "#9ca3af", fontSize: "0.95rem", lineHeight: 1.6, margin: "0 0 1rem" }}>
-            Письмо отправлено на <strong style={{ color: "#fff" }}>{registeredEmail}</strong>.<br />
+            Письмо отправлено на <strong style={{ color: "#fff" }}>{registeredEmail}</strong>. <br />
             Перейдите по ссылке в письме, чтобы активировать аккаунт.
           </p>
 
@@ -142,7 +149,13 @@ export function RegisterPage() {
           />
         </FormField>
 
-        <FormField id="email" label="Email" error={errors.email?.message} hint="На этот адрес придёт письмо с подтверждением">
+        <FormField
+          id="email"
+          label="Email"
+          error={errors.email?.message}
+          validationStatus={validationStatus}
+          validationMessage={validationMessage}
+        >
           <input
             id="email"
             type="email"
@@ -192,7 +205,7 @@ export function RegisterPage() {
 
         <motion.button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || (validationStatus === 'invalid')}
           whileTap={{ scale: 0.98 }}
           className="auth-submit"
         >

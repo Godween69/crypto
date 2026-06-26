@@ -52,6 +52,7 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"  # NestJS dev server
+      - "5555:5555"    # Prisma Studio
     environment:
       NODE_ENV: development
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
