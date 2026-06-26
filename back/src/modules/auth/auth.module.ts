@@ -1,5 +1,4 @@
 // back/src/modules/auth/auth.module.ts
-
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -10,7 +9,8 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { YandexStrategy } from './strategies/yandex.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { RolesGuard } from './guards/roles.guard'; // <-- Импорт Guard для проверки ролей
+import { RolesGuard } from './guards/roles.guard';
+import { IsAllowedEmailDomainConstraint } from './validators/allowed-email-domain.validator'; // <-- НОВОЕ
 import { RedisModule } from '../../redis/redis.module';
 
 @Module({
@@ -30,10 +30,11 @@ import { RedisModule } from '../../redis/redis.module';
   providers: [
     AuthService,
     JwtStrategy,
-    RolesGuard, // <-- Регистрируем Guard в DI-контейнере
+    RolesGuard,
     YandexStrategy,
-    { provide: APP_GUARD, useClass: JwtAuthGuard }, // Глобальная JWT-защита
+    // IsAllowedEmailDomainConstraint, больше не нужен в providers — он не использует DI
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
-  exports: [AuthService, JwtModule, RolesGuard], // <-- Экспортируем для использования в других модулях
+  exports: [AuthService, JwtModule, RolesGuard],
 })
-export class AuthModule {}
+export class AuthModule { }

@@ -3,8 +3,8 @@
 crypto
 ├─ back
 │  ├─ .prettierrc
+│  ├─ Dockerfile.dev
 │  ├─ diag-fetch.mjs
-│  ├─ Dockerfile
 │  ├─ eslint.config.mjs
 │  ├─ nest-cli.json
 │  ├─ package-lock.json
@@ -25,9 +25,10 @@ crypto
 │  │  │  │  └─ migration.sql
 │  │  │  ├─ 20260528130803_add_yandex_oauth_fields
 │  │  │  │  └─ migration.sql
+│  │  │  ├─ 20260601160620_add_image_to_coin
+│  │  │  │  └─ migration.sql
 │  │  │  └─ migration_lock.toml
 │  │  └─ schema.prisma
-│  ├─ README.md
 │  ├─ src
 │  │  ├─ analytics
 │  │  │  ├─ index.controller.ts
@@ -35,12 +36,12 @@ crypto
 │  │  │  ├─ info.md
 │  │  │  └─ portfolio-snapshot.service.ts
 │  │  ├─ app.module.ts
+│  │  ├─ assets
+│  │  │  └─ coinlore-assets.json
 │  │  ├─ common
 │  │  │  └─ prisma
 │  │  │     ├─ prisma.module.ts
 │  │  │     └─ prisma.service.ts
-│  │  ├─ config
-│  │  │  └─ market.config.ts
 │  │  ├─ main.ts
 │  │  ├─ modules
 │  │  │  ├─ auth
@@ -65,9 +66,11 @@ crypto
 │  │  │  │  │  └─ user-context.interceptor.ts
 │  │  │  │  ├─ middleware
 │  │  │  │  │  └─ user-context.middleware.ts
-│  │  │  │  └─ strategies
-│  │  │  │     ├─ jwt.strategy.ts
-│  │  │  │     └─ yandex.strategy.ts
+│  │  │  │  ├─ strategies
+│  │  │  │  │  ├─ jwt.strategy.ts
+│  │  │  │  │  └─ yandex.strategy.ts
+│  │  │  │  └─ validators
+│  │  │  │     └─ allowed-email-domain.validator.ts
 │  │  │  ├─ email
 │  │  │  │  ├─ email.module.ts
 │  │  │  │  └─ email.service.ts
@@ -116,7 +119,9 @@ crypto
 │  │     └─ passport-yandex.d.ts
 │  ├─ tsconfig.build.json
 │  └─ tsconfig.json
+├─ docker-compose.dev.yml
 ├─ front
+│  ├─ Dockerfile.dev
 │  ├─ eslint.config.js
 │  ├─ index.html
 │  ├─ package-lock.json
@@ -124,8 +129,9 @@ crypto
 │  ├─ public
 │  │  ├─ favicon.svg
 │  │  └─ icons.svg
-│  ├─ README.md
 │  ├─ src
+│  │  ├─ App.css
+│  │  ├─ App.tsx
 │  │  ├─ api
 │  │  │  ├─ client.ts
 │  │  │  ├─ market.api.ts
@@ -133,22 +139,20 @@ crypto
 │  │  │  └─ transaction.api.ts
 │  │  ├─ app
 │  │  │  └─ router.tsx
-│  │  ├─ App.css
-│  │  ├─ App.tsx
 │  │  ├─ components
 │  │  │  ├─ Analytics
 │  │  │  │  ├─ ChartPanel
 │  │  │  │  │  ├─ ChartPanel.css
 │  │  │  │  │  └─ ChartPanel.tsx
 │  │  │  │  ├─ PortfolioDistributionChart
-│  │  │  │  │  ├─ chart.config.ts
 │  │  │  │  │  ├─ PortfolioDistributionChart.css
-│  │  │  │  │  └─ PortfolioDistributionChart.tsx
+│  │  │  │  │  ├─ PortfolioDistributionChart.tsx
+│  │  │  │  │  └─ chart.config.ts
 │  │  │  │  └─ PortfolioIndexChart
-│  │  │  │     ├─ index-chart.config.ts
-│  │  │  │     ├─ info.md
 │  │  │  │     ├─ PortfolioIndexChart.css
-│  │  │  │     └─ PortfolioIndexChart.tsx
+│  │  │  │     ├─ PortfolioIndexChart.tsx
+│  │  │  │     ├─ index-chart.config.ts
+│  │  │  │     └─ info.md
 │  │  │  ├─ Auth
 │  │  │  │  ├─ Auth.css
 │  │  │  │  ├─ AuthHero.tsx
@@ -178,17 +182,17 @@ crypto
 │  │  │  │  │  ├─ PortfolioGrid.css
 │  │  │  │  │  └─ PortfolioGrid.tsx
 │  │  │  │  └─ PortfolioSummary
-│  │  │  │     ├─ info.md
 │  │  │  │     ├─ PortfolioSummary.css
-│  │  │  │     └─ PortfolioSummary.tsx
+│  │  │  │     ├─ PortfolioSummary.tsx
+│  │  │  │     └─ info.md
 │  │  │  ├─ ProtectedRoute.tsx
 │  │  │  └─ TransactionForm
 │  │  │     ├─ AmountField.tsx
-│  │  │     ├─ info.md
 │  │  │     ├─ PriceField.tsx
 │  │  │     ├─ SymbolField.tsx
 │  │  │     ├─ TransactionForm.css
 │  │  │     ├─ TransactionForm.tsx
+│  │  │     ├─ info.md
 │  │  │     ├─ useSymbolValidation.ts
 │  │  │     └─ useTransactionForm.ts
 │  │  ├─ hooks
@@ -242,7 +246,6 @@ crypto
 │  ├─ tsconfig.json
 │  ├─ tsconfig.node.json
 │  └─ vite.config.ts
-├─ info.md
-└─ README.md
+└─ info.md
 
 ```

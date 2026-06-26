@@ -51,7 +51,7 @@ export class AuthService {
     private cls: ClsService,
     private redis: RedisService,
     private email: EmailService,
-  ) {}
+  ) { }
 
   // OAuth вход/регистрация через Яндекс
   async yandexLogin(
@@ -118,6 +118,10 @@ export class AuthService {
     meta: { ip: string; fingerprint?: string },
   ): Promise<{ message: string }> {
     this.logger.log(`[Auth:Register] Начало регистрации: ${dto.email}`);
+
+    // Логирование для аналитики (валидация уже прошла на уровне DTO)
+    const domain = dto.email.split('@')[1]?.toLowerCase();
+    this.logger.debug(`[Auth:Register] Домен email: ${domain}`);
 
     const exists = await this.prisma.x.user.findUnique({
       where: { email: dto.email },
@@ -206,7 +210,7 @@ export class AuthService {
       this.logger.log(
         `[Auth:VerifyEmail] Email уже подтверждён для userId=${stored.userId}. Выдача токенов.`,
       );
-      await this.redis.del(redisKey).catch(() => {});
+      await this.redis.del(redisKey).catch(() => { });
       return this.issueTokenPair(currentUser, meta);
     }
 
