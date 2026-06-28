@@ -1,81 +1,118 @@
 // back/src/providers/coingecko/coingecko.provider.ts
-// Провайдер CoinGecko: источник метаданных (картинки + geckoId) и фоллбэк для цен
 import { Injectable, Logger } from '@nestjs/common';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
+import { ConfigService } from '@nestjs/config';
+
 import { MarketDataProvider } from '../market-provider.interface';
 import { MarketData } from '../../modules/market/types/market.types';
+import { CoingeckoResolver } from './coingecko.resolver';
 
-type GeckoSearchResult = {
-  id: string;
-  name: string;
-  symbol: string;
-  market_cap_rank: number;
-  thumb: string;
-  large: string;
-};
+// ==========================================
+// КОНСТАНТЫ
+// ==========================================
+
+// Максимальное количество retry при rate limit (429)
+const MAX_RETRIES = 3;
+
+// Базовая задержка для exponential backoff (5 секунд)
+const BASE_RETRY_DELAY_MS = 5000;
+
+// ==========================================
+// ПРОВАЙДЕР
+// ==========================================
 
 @Injectable()
 export class CoingeckoProvider implements MarketDataProvider {
   readonly name = 'coingecko';
+
   private readonly logger = new Logger(CoingeckoProvider.name);
   private readonly baseUrl = 'https://api.coingecko.com/api/v3';
 
-  // Внутренний кэш symbol -> { geckoId, image } для избежания повторных запросов
-  private metadataCache = new Map<string, { geckoId: string; image: string }>();
+  constructor(
+    private readonly resolver: CoingeckoResolver,
+    private readonly config: ConfigService,
+  ) { }
 
-  // Загрузка метаданных (картинка + geckoId) для новых монет через /search
-  async loadMetadata(symbols: string[]): Promise<void> {
-    const toFetch = symbols.filter(
-      (s) => !this.metadataCache.has(s.toUpperCase()),
-    );
-    if (toFetch.length === 0) return;
+  // ─────────────────────────────────────────────────────────────
+  // ПОЛУЧЕНИЕ ЦЕН
+  // ─────────────────────────────────────────────────────────────
 
-    for (const sym of toFetch) {
-      try {
-        const { data } = await axios.get<{ coins: GeckoSearchResult[] }>(
-          `${this.baseUrl}/search`,
-          {
-            params: { query: sym },
-            timeout: 10000,
-          },
-        );
-        // Ищем точное совпадение по символу (Gecko может вернуть несколько похожих)
-        const match = data.coins?.find(
-          (c) => c.symbol.toUpperCase() === sym.toUpperCase(),
-        );
-        if (match) {
-          this.metadataCache.set(sym.toUpperCase(), {
-            geckoId: match.id,
-            image: match.large || match.thumb, // large = 250px, thumb = 25px
-          });
-        }
-        // Пауза 1.5 сек, чтобы не улететь в rate limit (бесплатный API ~10-30 req/min)
-        await new Promise((r) => setTimeout(r, 1500));
-      } catch (e) {
-        this.logger.warn(
-          `Gecko search failed for ${sym}: ${e instanceof Error ? e.message : 'unknown'}`,
-        );
-      }
-    }
-  }
-
-  // Геттер для извлечения метаданных из кэша
-  getMetadata(symbol: string): { geckoId: string; image: string } | undefined {
-    return this.metadataCache.get(symbol.toUpperCase());
-  }
-
-  // Фоллбэк для цен (используется, если CoinLore не нашел монету)
+  /**
+   * Получает цены для списка символов
+   *
+   * Поток данных:
+   * 1. Резолвим все символы через CoingeckoResolver (4 уровня кэша)
+   * 2. Извлекаем geckoId из результатов
+   * 3. Делаем ОДИН запрос к /simple/price для всех монет
+   * 4. Склеиваем цены с метаданными (image)
+   */
   async fetch(symbols: string[]): Promise<MarketData[]> {
     if (symbols.length === 0) return [];
-    await this.loadMetadata(symbols); // Убеждаемся, что у нас есть geckoId
 
-    const ids = symbols
-      .map((s) => this.metadataCache.get(s.toUpperCase())?.geckoId)
-      .filter((id): id is string => !!id);
-    if (ids.length === 0) return [];
+    // ✅ ШАГ 1: Резолвим все символы через единый resolver
+    const resolved = await this.resolver.resolveMany(symbols);
 
+    if (resolved.length === 0) {
+      this.logger.warn(
+        `[CoinGecko:Provider] ⚠️ Нет geckoId для монет: ${symbols.join(', ')}`,
+      );
+      return [];
+    }
+
+    // ✅ ШАГ 2: Извлекаем geckoId
+    const ids = resolved.map((r) => r.id);
+    const idToSymbol = new Map(resolved.map((r) => [r.id, r.symbol]));
+    const idToImage = new Map(
+      resolved.filter((r) => r.image).map((r) => [r.id, r.image!]),
+    );
+
+    // ✅ ШАГ 3: ОДИН запрос к /simple/price для всех монет
+    const prices = await this.fetchPricesWithRetry(ids);
+
+    if (Object.keys(prices).length === 0) {
+      this.logger.warn(
+        `[CoinGecko:Provider] ⚠️ CoinGecko не вернул цены для ${ids.length} монет`,
+      );
+      return [];
+    }
+
+    // ✅ ШАГ 4: Склеиваем цены с метаданными
+    const results: MarketData[] = [];
+    for (const geckoId of ids) {
+      const symbol = idToSymbol.get(geckoId);
+      const price = prices[geckoId];
+
+      if (!symbol || !price) continue;
+
+      results.push({
+        coinId: geckoId,
+        symbol: symbol.toUpperCase(),
+        currentPrice: price.usd || 0,
+        change24h: price.usd_24h_change || 0,
+        image: idToImage.get(geckoId) || '',
+        rank: price.usd_market_cap_rank || null,
+      });
+    }
+
+    this.logger.debug(
+      `[CoinGecko:Provider] ✅ Получены цены для ${results.length}/${symbols.length} монет`,
+    );
+
+    return results;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ЗАПРОС ЦЕН С RETRY
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Делает запрос к /simple/price с retry при rate limit (429)
+   */
+  private async fetchPricesWithRetry(
+    ids: string[],
+    attempt = 1,
+  ): Promise<Record<string, { usd: number; usd_24h_change: number; usd_market_cap_rank: number | null }>> {
     try {
-      // /simple/price требует именно geckoId (bitcoin), а не символ (btc)
       const { data } = await axios.get(`${this.baseUrl}/simple/price`, {
         params: {
           ids: ids.join(','),
@@ -86,26 +123,25 @@ export class CoingeckoProvider implements MarketDataProvider {
         timeout: 10000,
       });
 
-      const results: MarketData[] = [];
-      for (const sym of symbols) {
-        const meta = this.metadataCache.get(sym.toUpperCase());
-        if (!meta || !data[meta.geckoId]) continue;
-        const raw = data[meta.geckoId];
-        results.push({
-          coinId: meta.geckoId,
-          symbol: sym.toUpperCase(),
-          currentPrice: raw.usd || 0,
-          change24h: raw.usd_24h_change || 0,
-          image: meta.image,
-          rank: raw.usd_market_cap_rank || null,
-        });
-      }
-      return results;
+      return data;
     } catch (error) {
+      const axiosError = error as AxiosError;
+
+      // ✅ RETRY ПРИ RATE LIMIT (429)
+      if (axiosError.response?.status === 429 && attempt < MAX_RETRIES) {
+        const retryDelay = BASE_RETRY_DELAY_MS * attempt;
+        this.logger.warn(
+          `[CoinGecko:Provider] ⏳ Rate limit, retry ${attempt}/${MAX_RETRIES} через ${retryDelay}мс`,
+        );
+        await new Promise((r) => setTimeout(r, retryDelay));
+        return this.fetchPricesWithRetry(ids, attempt + 1);
+      }
+
+      // Другие ошибки — логируем и возвращаем пустой объект
       this.logger.error(
-        `❌ CoinGecko price fetch failed: ${error instanceof Error ? error.message : 'unknown'}`,
+        `[CoinGecko:Provider] ❌ Price fetch failed: ${axiosError.message || 'unknown'}`,
       );
-      return [];
+      return {};
     }
   }
 }

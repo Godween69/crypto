@@ -9,22 +9,23 @@ import { CoinRepository } from './coin.repository';
 import { MarketData } from './types/market.types';
 import { CoinloreProvider } from '../../providers/coinlore/coinlore.provider';
 import { CoingeckoProvider } from '../../providers/coingecko/coingecko.provider';
+import { CoingeckoResolver } from '../../providers/coingecko/coingecko.resolver'; // <-- НОВОЕ
 
 @Injectable()
 export class MarketService implements OnModuleInit {
   private readonly logger = new Logger(MarketService.name);
   private readonly CACHE_TTL = 300; // 5 минут для цен
-  private readonly IMAGE_TTL = 86400 * 30; // 30 дней для картинок
   private refreshPromise: Promise<MarketData[]> | null = null;
 
   constructor(
     private readonly coinloreProvider: CoinloreProvider,
     private readonly coingeckoProvider: CoingeckoProvider,
+    private readonly coingeckoResolver: CoingeckoResolver, // <-- НОВОЕ: используем resolver напрямую
     private readonly coinRepository: CoinRepository,
     private readonly redis: RedisService,
     private readonly gateway: MarketGateway,
     private readonly prisma: PrismaService,
-  ) {}
+  ) { }
 
   async onModuleInit() {
     // При старте проверяем портфель и догружаем картинки для существующих монет
@@ -207,7 +208,7 @@ export class MarketService implements OnModuleInit {
     return this.refreshPromise;
   }
 
-  // Проверка Redis и догрузка картинок через CoinGecko для новых монет
+  // ✅ ПЕРЕПИСАНО: проверка Redis и догрузка картинок через CoingeckoResolver
   private async ensureImagesForSymbols(symbols: string[]): Promise<void> {
     const missing: string[] = [];
     for (const sym of symbols) {
@@ -219,15 +220,26 @@ export class MarketService implements OnModuleInit {
     this.logger.log(
       `🖼️ Догрузка картинок из CoinGecko для ${missing.join(', ')}...`,
     );
-    await this.coingeckoProvider.loadMetadata(missing);
 
-    // Сохраняем в Redis и БД (geckoId)
-    for (const sym of missing) {
-      const meta = this.coingeckoProvider.getMetadata(sym);
-      if (meta) {
-        await this.redis.set(`market:image:${sym}`, meta.image, this.IMAGE_TTL);
-        await this.coinRepository.upsert(sym, meta.geckoId, meta.geckoId); // сохраняем geckoId в БД
-      }
+    // ✅ Резолвим через единый resolver (4 уровня кэша: Memory → Redis → DB → API)
+    // Resolver САМ сохраняет:
+    // - image → Redis (market:image:SYMBOL, TTL 30d)
+    // - geckoId → PostgreSQL (таблица Coin)
+    // - geckoId → Redis (coin:SYMBOL, TTL 24h)
+    // - {id, image} → Memory cache
+    const resolved = await this.coingeckoResolver.resolveMany(missing);
+
+    if (resolved.length > 0) {
+      this.logger.log(
+        `✅ Загружены метаданные для ${resolved.length}/${missing.length} монет`,
+      );
+    }
+
+    const failedCount = missing.length - resolved.length;
+    if (failedCount > 0) {
+      this.logger.warn(
+        `⚠️ Не удалось загрузить метаданные для ${failedCount} монет (возможно, опечатки или не существуют)`,
+      );
     }
   }
 }

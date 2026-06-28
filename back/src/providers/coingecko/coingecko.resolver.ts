@@ -1,211 +1,349 @@
-// back\src\providers\coingecko\coingecko.resolver.ts
-
-import { Injectable, OnModuleInit } from '@nestjs/common';
+// back/src/providers/coingecko/coingecko.resolver.ts
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-
 import { ConfigService } from '@nestjs/config';
-
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
 import { CoinRepository } from '../../modules/market/coin.repository';
 import { RedisService } from '../../redis/redis.service';
 
-// Ответ CoinGecko
+// ==========================================
+// ТИПЫ
+// ==========================================
+
+// Ответ CoinGecko /search
 type CoinGeckoSearch = {
   coins: {
     id: string;
     symbol: string;
     name: string;
-    market_cap_rank: number;
+    market_cap_rank: number | null;
+    thumb: string;
+    large: string;
   }[];
 };
 
-// Пакетный тип
-type ResolvedCoin = {
+// Результат резолвинга: geckoId + image URL
+export type ResolvedCoin = {
   symbol: string;
   id: string;
+  image?: string;
 };
+
+// ==========================================
+// КОНСТАНТЫ
+// ==========================================
+
+// TTL для кэширования "монеты нет" (защита от спама API при опечатках)
+const NOT_FOUND_TTL = 300; // 5 минут
+const NOT_FOUND_MARKER = '__NOT_FOUND__';
+
+// TTL для image URL в Redis (30 дней)
+const IMAGE_TTL = 60 * 60 * 24 * 30;
+
+// TTL для geckoId в Redis (24 часа)
+const GECKO_ID_TTL = 60 * 60 * 24;
+
+// Максимальное количество retry при rate limit (429)
+const MAX_RETRIES = 3;
+
+// Базовая задержка для exponential backoff (5 секунд)
+const BASE_RETRY_DELAY_MS = 5000;
+
+// Лимит market cap rank для фильтрации скам-токенов
+const RANK_LIMIT = 2000;
+
+// ==========================================
+// РЕЗОЛВЕР
+// ==========================================
 
 @Injectable()
 export class CoingeckoResolver implements OnModuleInit {
-  private map = new Map<string, string>();
+  private readonly logger = new Logger(CoingeckoResolver.name);
 
-  // TTL для кэширования "монеты нет" (чтобы не спамить API при опечатках)
-  private readonly NOT_FOUND_TTL = 300; // 5 минут
+  // In-memory кэш: symbol → { id, image }
+  private readonly memoryCache = new Map<string, { id: string; image?: string }>();
+
+  // In-memory кэш "не найдено": symbol → timestamp
+  private readonly notFoundCache = new Map<string, number>();
 
   constructor(
-    private repo: CoinRepository,
-    private config: ConfigService, //Чтение .env
-    private redis: RedisService, // добавляем Redis слой между map и БД
-  ) {}
+    private readonly repo: CoinRepository,
+    private readonly config: ConfigService,
+    private readonly redis: RedisService,
+  ) { }
 
-  // ────── Прогрев кэша при старте ────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  // ПРОГРЕВ КЭША ПРИ СТАРТЕ
+  // ─────────────────────────────────────────────────────────────
 
-  // Загружаем все используемые монеты из БД в память.
-  async init() {
-    const coins = await this.repo.findAll();
-    this.map = new Map(coins.map((c) => [c.symbol.toUpperCase(), c.geckoId]));
-  }
-  // авто-прогрев кэша (до того, как придёт первый пользователь)
   async onModuleInit() {
-    await this.init();
+    const coins = await this.repo.findAll();
+    for (const coin of coins) {
+      this.memoryCache.set(coin.symbol.toUpperCase(), {
+        id: coin.geckoId,
+        image: undefined, // image загрузится из Redis при первом запросе
+      });
+    }
+    this.logger.log(
+      `[CoinGecko:Resolver] Прогрет кэш: ${coins.length} монет из БД`,
+    );
   }
 
-  // ────── Резолвер symbol -> gecko id ────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  // ЕДИНЫЙ МЕТОД РЕЗОЛВИНГА
+  // ─────────────────────────────────────────────────────────────
 
-  async resolve(symbol: string): Promise<string> {
+  /**
+   * Резолвит symbol → { geckoId, image }
+   *
+   * Поток данных (4 уровня кэша):
+   * 1. Memory cache (0ms) — самый быстрый
+   * 2. Redis cache (1-2ms) — shared между инстансами
+   * 3. PostgreSQL (1-5ms) — надёжный якорь
+   * 4. CoinGecko API (800ms+) — последний шанс
+   */
+  async resolve(symbol: string): Promise<ResolvedCoin> {
     const key = symbol.toUpperCase();
 
-    // 1. Память (0мс)
-    // самый быстрый слой (in-process cache)
-    const cached = this.map.get(key);
-    if (cached) return cached;
+    // ✅ ПРОВЕРКА 1: "Не найдено" в памяти (защита от спама)
+    const notFoundAt = this.notFoundCache.get(key);
+    if (notFoundAt && Date.now() - notFoundAt < NOT_FOUND_TTL * 1000) {
+      throw new Error(`Монета не найдена (cached): ${symbol}`);
+    }
 
-    // 2. Redis cache (1–2мс, shared между инстансами)
-    const redisKey = `coin:${key}`;
-
-    try {
-      const redisCached = await this.redis.get<string>(redisKey);
-      if (redisCached) {
-        // 🔥 FIX: Проверка на маркер "не найдено", чтобы не искать снова
-        if (redisCached === '__NOT_FOUND__') {
-          throw new Error(`Монета не найдена (cached): ${symbol}`);
+    // ✅ ПРОВЕРКА 2: Memory cache (0ms)
+    const memoryCached = this.memoryCache.get(key);
+    if (memoryCached) {
+      // Попытка получить image из Redis (если ещё нет в памяти)
+      if (!memoryCached.image) {
+        const image = await this.getImageFromRedis(key);
+        if (image) {
+          memoryCached.image = image;
         }
-        this.map.set(key, redisCached); // прогреваем memory cache
-        return redisCached;
       }
-    } catch {
+      return { symbol: key, id: memoryCached.id, image: memoryCached.image };
+    }
+
+    // ✅ ПРОВЕРКА 3: Redis cache (1-2ms)
+    try {
+      const redisKey = `coin:${key}`;
+      const redisCached = await this.redis.get<string>(redisKey);
+
+      if (redisCached) {
+        // Проверка на маркер "не найдено"
+        if (redisCached === NOT_FOUND_MARKER) {
+          this.notFoundCache.set(key, Date.now());
+          throw new Error(`Монета не найдена (cached in Redis): ${symbol}`);
+        }
+
+        // Прогреваем memory cache
+        const image = await this.getImageFromRedis(key);
+        this.memoryCache.set(key, { id: redisCached, image });
+        return { symbol: key, id: redisCached, image };
+      }
+    } catch (err) {
       // Redis не должен ломать основной flow
-      // fallback просто продолжается дальше
+      if (err instanceof Error && err.message.includes('cached')) {
+        throw err;
+      }
+      this.logger.debug(`[CoinGecko:Resolver] Redis error: ${err}`);
     }
 
-    // 3. База данных (1–5мс)
+    // ✅ ПРОВЕРКА 4: PostgreSQL (1-5ms)
     const dbCoin = await this.repo.findBySymbol(key);
-
     if (dbCoin) {
-      this.map.set(key, dbCoin.geckoId);
+      const image = await this.getImageFromRedis(key);
+      this.memoryCache.set(key, { id: dbCoin.geckoId, image });
 
-      // сохраняем в Redis (TTL: 24h)
-      await this.redis.set(redisKey, dbCoin.geckoId, 60 * 60 * 24);
+      // Синхронизируем Redis
+      await this.redis.set(`coin:${key}`, dbCoin.geckoId, GECKO_ID_TTL);
 
-      return dbCoin.geckoId;
+      return { symbol: key, id: dbCoin.geckoId, image };
     }
 
-    //  4. Внешний API (800мс)
-    const geckoId = await this.searchCoin(symbol);
+    // ✅ ПРОВЕРКА 5: CoinGecko API (800ms+)
+    const result = await this.searchCoinWithRetry(symbol);
 
-    // Если нет - бросаем ошибку
-    if (!geckoId) {
-      // 🔥 FIX: Кэшируем отсутствие монеты, чтобы не долбить API при повторных вводах мусора
-      await this.redis.set(redisKey, '__NOT_FOUND__', this.NOT_FOUND_TTL);
+    if (!result) {
+      // Кэшируем "не найдено" в Redis и памяти
+      await this.redis.set(`coin:${key}`, NOT_FOUND_MARKER, NOT_FOUND_TTL);
+      this.notFoundCache.set(key, Date.now());
       throw new Error(`Монета не найдена: ${symbol}`);
     }
 
-    //  Race Condition защита (DB write)
+    // ✅ СОХРАНЕНИЕ РЕЗУЛЬТАТА
+    // Race condition защита (P2002 — unique constraint violation)
     try {
-      await this.repo.upsert(key, geckoId);
+      await this.repo.upsert(key, result.id);
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2002') {
-          const existing = await this.repo.findBySymbol(key);
-
-          if (existing) {
-            this.map.set(key, existing.geckoId);
-
-            // sync Redis тоже
-            await this.redis.set(redisKey, existing.geckoId, 60 * 60 * 24);
-
-            return existing.geckoId;
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const existing = await this.repo.findBySymbol(key);
+        if (existing) {
+          this.memoryCache.set(key, { id: existing.geckoId, image: result.image });
+          await this.redis.set(`coin:${key}`, existing.geckoId, GECKO_ID_TTL);
+          if (result.image) {
+            await this.redis.set(`market:image:${key}`, result.image, IMAGE_TTL);
           }
+          return { symbol: key, id: existing.geckoId, image: result.image };
         }
       }
-
       throw error;
     }
 
-    //Финальное сохранение (memory + Redis)
-    this.map.set(key, geckoId);
-    await this.redis.set(redisKey, geckoId, 60 * 60 * 24);
+    // Финальное сохранение во все уровни кэша
+    this.memoryCache.set(key, { id: result.id, image: result.image });
+    await this.redis.set(`coin:${key}`, result.id, GECKO_ID_TTL);
+    if (result.image) {
+      await this.redis.set(`market:image:${key}`, result.image, IMAGE_TTL);
+    }
 
-    return geckoId;
-  }
-
-  // ────── Пакетный резолвер ────────────────────────────────────
-
-  // Используем метод allSettled для частичного успеха
-  async resolveMany(symbols: string[]): Promise<ResolvedCoin[]> {
-    const results = await Promise.allSettled(
-      symbols.map(async (symbol) => ({
-        symbol,
-        id: await this.resolve(symbol),
-      })),
+    this.logger.log(
+      `[CoinGecko:Resolver] ✅ Новая монета: ${symbol} → ${result.id}`,
     );
 
-    return results
+    return { symbol: key, id: result.id, image: result.image };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ПАКЕТНЫЙ РЕЗОЛВЕР
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Резолвит массив символов с частичным успехом
+   * Использует Promise.allSettled для устойчивости к ошибкам
+   */
+  async resolveMany(symbols: string[]): Promise<ResolvedCoin[]> {
+    const results = await Promise.allSettled<ResolvedCoin>(
+      symbols.map(async (symbol) => {
+        const resolved = await this.resolve(symbol);
+        return { symbol, id: resolved.id, image: resolved.image };
+      }),
+    );
+
+    const resolved: ResolvedCoin[] = results
       .filter(
         (r): r is PromiseFulfilledResult<ResolvedCoin> =>
           r.status === 'fulfilled',
       )
       .map((r) => r.value);
+
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    if (failed > 0) {
+      this.logger.warn(
+        `[CoinGecko:Resolver] ⚠️ Не удалось резолвить ${failed}/${symbols.length} монет`,
+      );
+    }
+
+    return resolved;
   }
 
-  // ────── Запрос к CoinGecko ────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  // ПОЛУЧЕНИЕ IMAGE ИЗ REDIS
+  // ─────────────────────────────────────────────────────────────
 
-  private async searchCoin(symbol: string): Promise<string | null> {
-    //
+  private async getImageFromRedis(symbol: string): Promise<string | undefined> {
+    try {
+      return (await this.redis.get<string>(`market:image:${symbol}`)) || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ЗАПРОС К COINGECKO С RETRY
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Делает запрос к CoinGecko /search с retry при rate limit (429)
+   */
+  private async searchCoinWithRetry(
+    symbol: string,
+    attempt = 1,
+  ): Promise<{ id: string; image?: string } | null> {
     const baseUrl = this.config.get<string>('COINGECKO_API_URL');
-    if (!baseUrl) throw new Error('COINGECKO_API_URL не настроен в .env');
+    if (!baseUrl) {
+      throw new Error('COINGECKO_API_URL не настроен в .env');
+    }
 
-    // CoinGecko /search возвращает список похожих монет
     try {
       const { data } = await axios.get<CoinGeckoSearch>(`${baseUrl}/search`, {
         params: { query: symbol },
-        timeout: 5000, // Не ждём дольше 5 секунд
+        timeout: 5000,
       });
 
-      const upperSymbol = symbol.toUpperCase();
+      return this.parseSearchResult(symbol, data);
+    } catch (error) {
+      const axiosError = error as AxiosError;
 
-      // 1. Сначала ищем точное совпадение (самый надежный вариант)
-      const exact = data.coins.find(
-        (c) => c.symbol.toUpperCase() === upperSymbol,
-      );
-
-      if (exact) {
-        // найдено строгое совпадение — сразу возвращаем
-        return exact.id;
+      // ✅ RETRY ПРИ RATE LIMIT (429)
+      if (axiosError.response?.status === 429 && attempt < MAX_RETRIES) {
+        const retryDelay = BASE_RETRY_DELAY_MS * attempt;
+        this.logger.warn(
+          `[CoinGecko:Resolver] ⏳ Rate limit для ${symbol}, retry ${attempt}/${MAX_RETRIES} через ${retryDelay}мс`,
+        );
+        await new Promise((r) => setTimeout(r, retryDelay));
+        return this.searchCoinWithRetry(symbol, attempt + 1);
       }
 
-      // 2. Фильтруем кандидатов (защита от мусора)
-      // оставляем только те, у которых symbol реально совпадает
-      const candidates = data.coins.filter(
-        (c) => c.symbol.toUpperCase() === upperSymbol,
+      // Другие ошибки — логируем и возвращаем null
+      this.logger.warn(
+        `[CoinGecko:Resolver] ❌ Search failed for ${symbol}: ${axiosError.message || 'unknown'}`,
       );
-
-      // 3. Безопасный fallback по market cap rank
-      // Это защищает от:
-      // - скам-токенов
-      // - фантомных совпадений
-      const RANK_LIMIT = 2000;
-
-      const pool = candidates.length > 0 ? candidates : data.coins;
-      const best = pool
-        .filter((c) => {
-          const rank = c.market_cap_rank ?? 999999;
-          return rank <= RANK_LIMIT;
-        })
-        .sort(
-          (a, b) =>
-            (a.market_cap_rank ?? 999999) - (b.market_cap_rank ?? 999999),
-        )[0];
-
-      // 4. Если ничего адекватного не нашли — проваливаемся в null
-      if (!best) return null;
-
-      return best.id;
-    } catch (error) {
-      // при проблемах с API просто возвращаем null
-      // Выше по стеку resolve() выбросит понятную ошибку "Монета не найдена"
       return null;
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ПАРСИНГ РЕЗУЛЬТАТА ПОИСКА
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Парсит ответ CoinGecko /search и выбирает лучшую монету
+   *
+   * Приоритет:
+   * 1. Точное совпадение по symbol
+   * 2. Совпадение по symbol с market_cap_rank <= RANK_LIMIT
+   * 3. Лучшая по market_cap_rank из всех результатов
+   */
+  private parseSearchResult(
+    symbol: string,
+    data: CoinGeckoSearch,
+  ): { id: string; image?: string } | null {
+    const upperSymbol = symbol.toUpperCase();
+
+    // 1. Точное совпадение по symbol
+    const exact = data.coins?.find(
+      (c) => c.symbol.toUpperCase() === upperSymbol,
+    );
+    if (exact) {
+      return {
+        id: exact.id,
+        image: exact.large || exact.thumb,
+      };
+    }
+
+    // 2. Фильтруем по market cap rank (защита от скама)
+    const candidates = data.coins?.filter(
+      (c) => c.symbol.toUpperCase() === upperSymbol,
+    ) || [];
+
+    const pool = candidates.length > 0 ? candidates : data.coins || [];
+    const best = pool
+      .filter((c) => (c.market_cap_rank ?? 999999) <= RANK_LIMIT)
+      .sort(
+        (a, b) =>
+          (a.market_cap_rank ?? 999999) - (b.market_cap_rank ?? 999999),
+      )[0];
+
+    if (!best) return null;
+
+    return {
+      id: best.id,
+      image: best.large || best.thumb,
+    };
   }
 }
