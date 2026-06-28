@@ -8,21 +8,25 @@ import { TransactionForm } from "../../components/TransactionForm/TransactionFor
 import { usePortfolio } from "../../hooks/usePortfolio";
 import { useMarketData } from "../../hooks/useMarketData";
 import { useModal } from "../../hooks/useModal";
+import { useAuthStore } from "../../store/authStore"; // ← ДОБАВИТЬ
 import "./PortfolioPage.css";
 
 export const PortfolioPage = () => {
   const navigate = useNavigate();
   const { open, close } = useModal();
+
+  // ✅ НОВОЕ: Получаем состояние авторизации
+  const user = useAuthStore((state) => state.user);
+  const isLoadingUser = useAuthStore((state) => state.isLoading);
+
   const portfolioQuery = usePortfolio();
 
-  // Запрашиваем рыночные данные ТОЛЬКО для UI-полей (иконки, имена, ранги)
   const symbols = useMemo(
     () => portfolioQuery.data?.map((i) => i.symbol) ?? [],
     [portfolioQuery.data]
   );
   const marketQuery = useMarketData(symbols);
 
-  // Безопасное слияние: бэкенд даёт финансы, маркет даёт UI-поля
   const items = useMemo(() => {
     if (!portfolioQuery.data) return [];
     const marketMap = new Map(
@@ -31,7 +35,6 @@ export const PortfolioPage = () => {
 
     return portfolioQuery.data.map((item) => ({
       ...item,
-      // Добавляем только UI-поля
       name: marketMap.get(item.symbol.toUpperCase())?.name ?? item.name,
       image: marketMap.get(item.symbol.toUpperCase())?.image ?? item.image,
       rank: marketMap.get(item.symbol.toUpperCase())?.rank ?? item.rank,
@@ -39,11 +42,14 @@ export const PortfolioPage = () => {
     }));
   }, [portfolioQuery.data, marketQuery.data]);
 
-  const isLoading =
-    portfolioQuery.isLoading ||
-    (symbols.length > 0 && marketQuery.isLoading);
-
+  // ✅ ИСПРАВЛЕНО: Учитываем загрузку пользователя
+  const isLoading = isLoadingUser || portfolioQuery.isLoading || (symbols.length > 0 && marketQuery.isLoading);
   const hasError = portfolioQuery.error || marketQuery.error;
+
+  // ✅ НОВОЕ: Если пользователь ещё не загрузился, показываем loader
+  if (isLoadingUser || !user) {
+    return <div className="pp-state">Загрузка...</div>;
+  }
 
   if (isLoading) return <div className="pp-state">Загрузка данных...</div>;
   if (hasError)
