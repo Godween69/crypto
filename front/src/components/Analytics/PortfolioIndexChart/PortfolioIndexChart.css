@@ -1,91 +1,252 @@
 /* front/src/components/Analytics/PortfolioIndexChart/PortfolioIndexChart.css */
+
+/* ─── Обёртка всего компонента ─────────────────────────────────────────────── */
 .index-chart-wrapper {
   display: flex;
-  flex-direction: column;
-  padding-left: 6px;
-  gap: 0; 
-  width: 100%;
-}
-
-.index-chart-viewport {
-  position: relative;
   min-width: 500px;
+  flex-direction: column;
   width: 100%;
-  height: 300px;
-  overflow: hidden;
+  gap: 0;
+  padding-left: 6px;
 }
 
-
-.index-chart-container,
-.index-chart-state {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.index-chart-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #94a3b8;
-  font-size: 14px;
-  /* border: 1px dashed #334155; */
-  border-radius: 8px;
-  /* background: #1e293b93; */
-  z-index: 2;
-}
-
-/* Таймфреймы под графиком, строго по центру */
-.index-chart-controls {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  min-height: 25px;
-  justify-content: center;
-}
-
-.index-chart-btn {
-  background: transparent;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  padding: 3px 8px;
-  margin-bottom: 15px;
-  font-size: 12px;
-  color: #94a3b8;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.index-chart-btn:hover {
-  border-color: #475569;
-  color: #cbd5e1;
-}
-
-.index-chart-btn--active {
-  background: #3b82f6;
-  border-color: #3b82f6;
-  color: #ffffff;
-}
-
-/* front/src/components/Analytics/PortfolioIndexChart/PortfolioIndexChart.css */
+/* ─── Заголовок ─────────────────────────────────────────────────────────────── */
 .index-chart-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 4px 8px 14px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 4px 12px 14px;
 }
 
+/* Цена портфеля — обновляется при hover */
 .index-chart-portfolio-value {
   font-size: 30px;
   font-weight: 700;
   color: #f1f5f9;
   letter-spacing: -0.5px;
-  font-variant-numeric: tabular-nums; /* фиксированная ширина цифр, чтобы сумма не прыгала */
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.15s ease;
 }
 
-.index-chart-value-skeleton,
-.index-chart-value-empty {
+/* На маленьких экранах чуть меньше, чтобы длинная сумма не переносилась */
+@media (max-width: 480px) {
+  .index-chart-portfolio-value {
+    font-size: 24px;
+  }
+}
+
+/* Заглушка при загрузке и пустом состоянии */
+.index-chart-value-placeholder {
+  color: #334155;
+  opacity: 0.8;
+}
+
+/* Дельта: +$1,240 (↑ 4.2%) */
+.index-chart-delta {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  transition: color 0.2s ease;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Viewport ──────────────────────────────────────────────────────────────── */
+.index-chart-viewport {
+  position: relative;
+  width: 100%;
+  /* Высота адаптируется под экран:
+     десктоп → 280px, планшет → 220px, телефон → 180px */
+  height: 280px;
+  overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .index-chart-viewport {
+    height: 220px;
+  }
+}
+
+@media (max-width: 480px) {
+  .index-chart-viewport {
+    height: 180px;
+  }
+}
+
+/* ECharts-контейнер — всегда в DOM */
+.index-chart-container {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Затемнение при фоновом рефетче (isFetching) */
+  transition: opacity 0.2s ease;
+}
+
+/* Класс вешается в компоненте при isFetching && !isLoading */
+.index-chart-container--fetching {
+  opacity: 0.4;
+}
+
+/* ─── Skeleton при загрузке ─────────────────────────────────────────────────── */
+.index-chart-skeleton {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  padding: 16px 16px 36px;
+  z-index: 3;
+}
+
+@media (max-width: 480px) {
+  .index-chart-skeleton {
+    padding: 12px 8px 28px;
+    gap: 2px;
+  }
+}
+
+.index-chart-skeleton-bar {
+  flex: 1;
+  border-radius: 2px 2px 0 0;
+  background: #1e293b;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+/* Волновой эффект — сдвиг фазы для каждого бара */
+.index-chart-skeleton-bar:nth-child(1) {
+  animation-delay: 0.00s;
+}
+
+.index-chart-skeleton-bar:nth-child(2) {
+  animation-delay: 0.07s;
+}
+
+.index-chart-skeleton-bar:nth-child(3) {
+  animation-delay: 0.14s;
+}
+
+.index-chart-skeleton-bar:nth-child(4) {
+  animation-delay: 0.21s;
+}
+
+.index-chart-skeleton-bar:nth-child(5) {
+  animation-delay: 0.28s;
+}
+
+.index-chart-skeleton-bar:nth-child(6) {
+  animation-delay: 0.35s;
+}
+
+.index-chart-skeleton-bar:nth-child(7) {
+  animation-delay: 0.42s;
+}
+
+.index-chart-skeleton-bar:nth-child(8) {
+  animation-delay: 0.49s;
+}
+
+.index-chart-skeleton-bar:nth-child(9) {
+  animation-delay: 0.56s;
+}
+
+.index-chart-skeleton-bar:nth-child(10) {
+  animation-delay: 0.63s;
+}
+
+.index-chart-skeleton-bar:nth-child(11) {
+  animation-delay: 0.70s;
+}
+
+.index-chart-skeleton-bar:nth-child(12) {
+  animation-delay: 0.77s;
+}
+
+@keyframes skeleton-pulse {
+
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .index-chart-skeleton-bar {
+    animation: none;
+    opacity: 0.4;
+  }
+
+  .index-chart-container {
+    transition: none;
+  }
+}
+
+/* ─── Оверлей состояний (ошибка / пусто) ────────────────────────────────────── */
+.index-chart-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 24px;
   color: #475569;
-  opacity: 0.6;
+  font-size: 13px;
+  line-height: 1.5;
+  z-index: 3;
+}
+
+/* ─── Кнопки таймфреймов ────────────────────────────────────────────────────── */
+.index-chart-controls {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 0px 0px 10px 0px;
+}
+
+/* На мобиле кнопки чуть крупнее — легче попасть пальцем */
+@media (max-width: 480px) {
+  .index-chart-controls {
+    gap: 4px;
+    padding: 6px 0 2px;
+  }
+}
+
+.index-chart-btn {
+  background: transparent;
+  border: 1px solid #1e293b;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  line-height: 1;
+
+  /* Минимальная зона касания 44px по высоте (рекомендация Apple HIG / WCAG) */
+  min-height: 32px;
+}
+
+@media (max-width: 480px) {
+  .index-chart-btn {
+    min-height: 36px;
+    padding: 4px 12px;
+    font-size: 13px;
+  }
+}
+
+.index-chart-btn:hover {
+  border-color: #334155;
+  color: #94a3b8;
+}
+
+/* Активная кнопка — цвет приходит через style={{}} из компонента */
+.index-chart-btn--active {
+  color: #ffffff;
 }
