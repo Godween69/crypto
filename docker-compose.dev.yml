@@ -16,11 +16,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5432:5432"  # Пробрасываем для подключения из DBeaver/pgAdmin
+      - "5432:5432" # Пробрасываем для подключения из DBeaver/pgAdmin
     volumes:
       - postgres_data_dev:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -34,9 +34,9 @@ services:
     restart: unless-stopped
     command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
     ports:
-      - "6379:6379"  # Пробрасываем для Redis CLI / GUI
+      - "6379:6379" # Пробрасываем для Redis CLI / GUI
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -51,8 +51,7 @@ services:
     container_name: crypto-backend-dev
     restart: unless-stopped
     ports:
-      - "3000:3000"  # NestJS dev server
-      - "5555:5555"    # Prisma Studio
+      - "3000:3000" # NestJS dev server
     environment:
       NODE_ENV: development
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
@@ -92,9 +91,9 @@ services:
     #     - action: rebuild
     #       path: ./back/package.json
 
-  # ==========================================
-  # 4. ФРОНТЕНД (Vite + React) — режим разработки
-  # ==========================================
+    # ==========================================
+    # 4. ФРОНТЕНД (Vite + React) — режим разработки
+    # ==========================================
   frontend:
     build:
       context: ./front
@@ -102,7 +101,7 @@ services:
     container_name: crypto-frontend-dev
     restart: unless-stopped
     ports:
-      - "5173:5173"  # Vite dev server
+      - "5173:5173" # Vite dev server
     environment:
       VITE_API_URL: http://localhost:3000
     volumes:
@@ -120,6 +119,18 @@ services:
     #       target: /app/src
     #     - action: rebuild
     #       path: ./front/package.json
+
+    # ==========================================
+    # ADMINER (только локально!)
+    # ==========================================
+  adminer:
+    image: adminer:latest
+    container_name: crypto-adminer
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    ports:
+      - "127.0.0.1:8888:8080" # ← только localhost, наружу закрыто
 
 # ==========================================
 # ТОМЫ (данные сохраняются между перезапусками)

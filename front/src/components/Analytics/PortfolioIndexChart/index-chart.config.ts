@@ -132,7 +132,7 @@ export const INDEX_CHART_CONFIG = {
   yAxis: {
     show: false, // скрываем ось — цена отображается в тултипе и заголовке (чище)
 
-    type: "value" as const,
+    type: "log" as const,
 
     // Отступ 3% снизу и 2% сверху — линия не прижата к краям
     // Используется в компоненте как: min = dataMin * Y_PADDING.bottom
